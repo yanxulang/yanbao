@@ -1,0 +1,27 @@
+[package]
+name = "yanbao"
+version = "0.1.0"
+edition = "2024"
+description = "言包：言序编程语言的官方包管理器"
+license = "MIT"
+repository = "https://github.com/YanXuLang/yanbao"
+homepage = "https://yanxu.dev/"
+readme = "README.md"
+keywords = ["yanxu", "package-manager", "chinese", "cli"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "yanbao"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive"] }
+serde_json = "1.0"
+tempfile = "3.20"
+toml_edit = "0.22"
+yanxu = { git = "https://github.com/YanXuLang/yanxu.git", tag = "v1.0.0" }
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
