@@ -16,7 +16,35 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - run: rustup component add rustfmt clippy
-      - run: cargo fmt --check
-      - run: cargo test --all-targets --locked
-      - run: cargo clippy --all-targets --locked -- -D warnings
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          repository: YanXuLang/yanxu
+          path: yanxu-core
+          ref: 746490ad6e6875fe82451a0f1ed1b0fc00cb8a26 # yanxu 1.1.5
+      - name: Build Yanxu runtime
+        run: cargo build --manifest-path yanxu-core/Cargo.toml --locked --bin yanxu
+      - name: Locate runtime
+        shell: bash
+        run: |
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
+          echo "YANXU_BIN=$GITHUB_WORKSPACE/yanxu-core/target/debug/yanxu$suffix" >> "$GITHUB_ENV"
+      - name: Enforce pure Yanxu implementation
+        shell: bash
+        run: |
+          test ! -e Cargo.toml
+          test -z "$(find src -name '*.rs' -print -quit)"
+      - name: Type check and specifications
+        shell: bash
+        run: |
+          "$YANXU_BIN" check src/主.yx
+          "$YANXU_BIN" test tests
+      - name: End-to-end project workflow
+        shell: bash
+        run: |
+          chmod +x ./yanbao
+          project="$RUNNER_TEMP/yanbao-e2e"
+          ./yanbao init "$project" --name CI工程 --force
+          ./yanbao doctor --manifest-path "$project"
+          ./yanbao build --manifest-path "$project" --release
+          ./yanbao run --manifest-path "$project"

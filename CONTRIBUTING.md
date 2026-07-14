@@ -1,26 +1,18 @@
 # 参与言包
 
-感谢你帮助言序建立可靠的包生态。
+言包 0.2 的业务实现必须使用言序语言。不得重新加入 Cargo 工程、Rust 命令分派器或另一套清单/锁解析器。
 
-## 开始之前
+## 本地验证
 
-- 错误修复、文档和测试可直接提交 Pull Request；
-- 包清单、锁文件或注册表协议变化须先创建 Issue 讨论，并同步言序核心规范；
-- 发布、凭据、签名和撤回相关设计必须包含威胁模型；
-- 一个 Pull Request 只处理一组相关改动。
-
-## 本地开发
-
-需要 Rust 稳定版工具链：
+需要言序 1.1.5 或更高版本：
 
 ```sh
-cargo fmt --check
-cargo test --all-targets --locked
-cargo clippy --all-targets --locked -- -D warnings
+yanxu version --json
+yanxu check src/主.yx
+yanxu test tests
+YANXU_BIN=yanxu ./yanbao doctor
 ```
 
-集成测试会在临时目录创建言序项目，不访问公开注册表。新增命令应同时覆盖人类输出、`--json`和失败回滚；新增网络行为必须覆盖`--offline`。
+新增命令应覆盖中文/英文名称、成功输出、非零失败、事务恢复及三平台启动器。包语义变化必须先进入言序核心和工程协议，再由言包编排；网络、注册表、原生制品或发布能力须附威胁模型。
 
-## 提交与 PR
-
-提交标题使用简短祈使句。PR 请说明用户问题、行为变化、验证命令、格式/安全影响和关联的核心或文档改动。所有贡献按 MIT 许可证发布，并须遵守[行为准则](CODE_OF_CONDUCT.md)。
+PR 请说明用户问题、行为变化、验证命令、协议版本和安全影响。所有贡献按 MIT 许可证发布并遵守[行为准则](CODE_OF_CONDUCT.md)。

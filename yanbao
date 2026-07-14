@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+YANXU_BIN=${YANXU_BIN:-yanxu}
+exec "$YANXU_BIN" "$SCRIPT_DIR/src/主.yx" -- "$@"

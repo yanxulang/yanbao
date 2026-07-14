@@ -1,3 +1,6 @@
-/target/
+.yanxu/
+build/
+target/
+言序.lock
 *.tmp
 .DS_Store
