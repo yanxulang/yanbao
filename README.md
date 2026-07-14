@@ -1,6 +1,7 @@
 # 言包
 
 [![CI](https://github.com/YanXuLang/yanbao/actions/workflows/ci.yml/badge.svg)](https://github.com/YanXuLang/yanbao/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/YanXuLang/yanbao)](https://github.com/YanXuLang/yanbao/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-c43b2f)](LICENSE)
 
 言包（`yanbao`）是专属于[言序语言](https://github.com/YanXuLang/yanxu)的官方包管理器。它负责创建项目、编辑依赖和组织日常工作流；`言序.toml`解析、依赖获取与`言序.lock`生成始终复用`yanxu::package`，不会形成第二套包格式。
@@ -26,7 +27,7 @@
 需要 Rust 稳定版工具链；`run`命令还需要已安装的言序运行器。
 
 ```sh
-cargo install --git https://github.com/YanXuLang/yanbao.git --locked
+cargo install --git https://github.com/YanXuLang/yanbao.git --tag v0.1.0 --locked
 yanbao --help
 ```
 
