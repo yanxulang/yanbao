@@ -116,7 +116,7 @@ impl ManifestEditor {
 pub fn create_manifest(name: &str) -> Result<String> {
     validate_package_name(name)?;
     Ok(format!(
-        "[包]\n格式 = 1\n名 = {name:?}\n版 = \"0.1.0\"\n入口 = \"src/主.yx\"\n\n[依赖]\n\n[权限]\n文件 = [\"src\"]\n网络 = []\n环境 = []\n进程 = false\n"
+        "[包]\n格式 = 1\n名 = {name:?}\n版 = \"0.1.0\"\n入口 = \"src/主.yx\"\n\n[依赖]\n\n[权限]\n文件 = [\"src\"]\n网络 = []\nTCP监听 = []\nUDP绑定 = []\n环境 = []\n进程 = false\n"
     ))
 }
 
