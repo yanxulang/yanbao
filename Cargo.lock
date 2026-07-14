@@ -1286,8 +1286,8 @@ dependencies = [
 
 [[package]]
 name = "yanxu"
-version = "1.1.4"
-source = "git+https://github.com/YanXuLang/yanxu.git?tag=v1.1.4#00656276d1d2a1e6c00b01b72677074551fd7229"
+version = "1.1.4-A"
+source = "git+https://github.com/YanXuLang/yanxu.git?tag=v1.1.4-A#6307b4aba7dc0d3d12892deab686ba8959fe798c"
 dependencies = [
  "base64",
  "flate2",

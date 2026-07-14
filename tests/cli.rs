@@ -99,3 +99,47 @@ fn rolls_back_manifest_when_dependency_resolution_fails() {
 
     assert_eq!(fs::read(app.join("言序.toml")).unwrap(), before);
 }
+
+#[cfg(unix)]
+#[test]
+fn forwards_arguments_after_separator_to_package_entry() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let workspace = tempfile::tempdir().unwrap();
+    let app = workspace.path().join("应用");
+    Command::cargo_bin("yanbao")
+        .unwrap()
+        .args(["init", app.to_str().unwrap()])
+        .assert()
+        .success();
+
+    let runner = workspace.path().join("yanxu-test-runner");
+    let capture = workspace.path().join("arguments.txt");
+    fs::write(
+        &runner,
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$YANBAO_TEST_CAPTURE\"\n",
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&runner).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&runner, permissions).unwrap();
+
+    Command::cargo_bin("yanbao")
+        .unwrap()
+        .env("YANXU_BIN", &runner)
+        .env("YANBAO_TEST_CAPTURE", &capture)
+        .args([
+            "--manifest-path",
+            app.to_str().unwrap(),
+            "run",
+            "--",
+            "--once",
+            "article-1",
+        ])
+        .assert()
+        .success();
+
+    let arguments = fs::read_to_string(capture).unwrap();
+    assert!(arguments.starts_with("包\n运行\n"));
+    assert!(arguments.ends_with("--\n--once\narticle-1\n"));
+}

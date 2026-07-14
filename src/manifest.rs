@@ -186,10 +186,11 @@ fn normalize_manifest(text: &str) -> String {
         .join("\n")
 }
 
-/// 言序 1.0 的兼容解析器会自行给中文表名和四个来源键加引号；写回时
-/// 恢复这些裸键，避免旧解析器对已经加引号的键再次加引号。
+/// 言序 1.0 的兼容解析器会自行给中文表名和键加引号；写回时恢复安全的
+/// 中文裸键，避免旧解析器对已经加引号的键再次加引号。
 fn render_for_yanxu(text: &str) -> String {
-    text.lines()
+    let rendered = text
+        .lines()
         .map(|line| {
             let indentation = &line[..line.len() - line.trim_start().len()];
             let trimmed = line.trim_start();
@@ -203,6 +204,23 @@ fn render_for_yanxu(text: &str) -> String {
             } else {
                 line.to_owned()
             };
+            let unquoted_key = {
+                let current = rendered.trim_start();
+                current.find('=').and_then(|equal| {
+                    let key = current[..equal].trim_end();
+                    let inner = key
+                        .strip_prefix('"')
+                        .and_then(|key| key.strip_suffix('"'))?;
+                    (!inner.is_ascii()
+                        && inner.chars().all(|character| {
+                            character.is_alphanumeric() || matches!(character, '_' | '-' | '.')
+                        }))
+                    .then(|| (key.len(), inner.to_owned()))
+                })
+            };
+            if let Some((key_length, inner)) = unquoted_key {
+                rendered.replace_range(indentation.len()..indentation.len() + key_length, &inner);
+            }
             for key in ["路径", "版", "修订", "源"] {
                 rendered = rendered.replace(&format!("\"{key}\" ="), &format!("{key} ="));
                 rendered = rendered.replace(&format!("\"{key}\"="), &format!("{key}="));
@@ -210,7 +228,8 @@ fn render_for_yanxu(text: &str) -> String {
             rendered
         })
         .collect::<Vec<_>>()
-        .join("\n")
+        .join("\n");
+    format!("{rendered}\n")
 }
 
 #[cfg(test)]
@@ -235,6 +254,11 @@ mod tests {
             .unwrap();
         editor.save().unwrap();
 
+        let saved = fs::read_to_string(&path).unwrap();
+        assert!(saved.contains("格式 = 1"));
+        assert!(saved.contains("工具 = { 路径 = \"../工具\", 版 = \"^1.0\" }"));
+        assert!(!saved.contains("\"格式\""));
+        assert!(saved.ends_with('\n'));
         let manifest = yanxu::package::load(&path).unwrap();
         assert!(manifest.dependencies.contains_key("工具"));
     }

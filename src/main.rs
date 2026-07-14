@@ -98,6 +98,9 @@ enum Commands {
     Run {
         #[arg(long)]
         offline: bool,
+        /// `--`之后原样传给言序包入口的参数。
+        #[arg(last = true)]
+        arguments: Vec<String>,
     },
 }
 
@@ -172,10 +175,10 @@ fn execute(cli: Cli) -> Result<()> {
             let manifest = load_manifest(cli.manifest_path.as_deref())?;
             report_manifest(&manifest, cli.json)
         }
-        Commands::Run { offline } => {
+        Commands::Run { offline, arguments } => {
             let manifest = load_manifest(cli.manifest_path.as_deref())?;
             package::ensure_lock(&manifest, offline)?;
-            run_package(&manifest, cli.json)
+            run_package(&manifest, cli.json, &arguments)
         }
     }
 }
@@ -379,13 +382,15 @@ fn report_manifest(manifest: &Manifest, json_output: bool) -> Result<()> {
     Ok(())
 }
 
-fn run_package(manifest: &Manifest, json_output: bool) -> Result<()> {
+fn run_package(manifest: &Manifest, json_output: bool, arguments: &[String]) -> Result<()> {
     let binary = env::var_os("YANXU_BIN").unwrap_or_else(|| "yanxu".into());
     if json_output {
-        let output = Command::new(&binary)
-            .arg("包")
-            .arg("运行")
-            .arg(&manifest.root)
+        let mut command = Command::new(&binary);
+        command.arg("包").arg("运行").arg(&manifest.root);
+        if !arguments.is_empty() {
+            command.arg("--").args(arguments);
+        }
+        let output = command
             .output()
             .with_context(|| format!("不能启动 {:?}；请先安装言序或设置 YANXU_BIN", binary))?;
         println!(
@@ -404,10 +409,12 @@ fn run_package(manifest: &Manifest, json_output: bool) -> Result<()> {
             bail!("言序运行器退出：{}", output.status);
         }
     } else {
-        let status = Command::new(&binary)
-            .arg("包")
-            .arg("运行")
-            .arg(&manifest.root)
+        let mut command = Command::new(&binary);
+        command.arg("包").arg("运行").arg(&manifest.root);
+        if !arguments.is_empty() {
+            command.arg("--").args(arguments);
+        }
+        let status = command
             .status()
             .with_context(|| format!("不能启动 {:?}；请先安装言序或设置 YANXU_BIN", binary))?;
         if !status.success() {
