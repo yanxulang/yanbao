@@ -10,3 +10,12 @@
 测试.相等（核心.确认工具链（）【「yanxu_version」】，「1.1.6」）；
 测试.断言（核心.有参数（【「--offline」，「--dev」】，「--dev」），「应识别开关」）；
 测试.相等（核心.文字选项（【「--name」，「工程」】，「--name」，「默认」），「工程」）；
+定 短包 为 核心.GitHub依赖（「json」）；
+测试.相等（短包【「alias」】，「json」）；
+测试.相等（短包【「package」】，「yanxu-json」）；
+测试.相等（短包【「url」】，「https://github.com/yanxulang/yanxu-json.git」）；
+测试.相等（核心.GitHub依赖（「yanxu-json」）【「url」】，短包【「url」】）；
+定 第三方 为 核心.GitHub依赖（「acme/yanxu-tools」）；
+测试.相等（第三方【「alias」】，「tools」）；
+测试.相等（第三方【「package」】，「yanxu-tools」）；
+测试.相等（第三方【「url」】，「https://github.com/acme/yanxu-tools.git」）；

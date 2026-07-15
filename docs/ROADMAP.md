@@ -1,5 +1,11 @@
 # 言包路线图
 
+## 0.4.0：GitHub 默认包源（已完成）
+
+- `add` 默认将短包名映射到 `yanxulang/yanxu-<包名>`；
+- 可省略官方组织名和 `yanxu-` 前缀，并支持第三方 `<组织>/<仓库>`；
+- 保留路径、任意 Git URL 和注册表来源作为显式覆盖。
+
 ## 0.3.1：Windows PowerShell 5.1 兼容（已完成）
 
 - 修复 Windows 安装器与启动器的 PowerShell 5.1 兼容性；

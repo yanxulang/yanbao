@@ -42,6 +42,9 @@ yanxu src/主.yx -- doctor
 
 ```sh
 yanbao 新 我的项目 --name 示例
+yanbao 加 json
+yanbao 加 yanxu-json
+yanbao 加 other-org/yanxu-json
 yanbao 加 共享工具 --path ../共享工具 --package 共享工具
 yanbao 装 --offline
 yanbao 树
@@ -55,7 +58,9 @@ yanbao 清
 yanbao 诊
 ```
 
-英文别名分别为 `init/add/remove/install/update/tree/why/check/test/run/build/clean/doctor`。使用 `--manifest-path <目录>`指定项目；`add/remove`在重新解析失败时恢复清单和锁文件；`--no-lock`可只编辑清单。
+英文别名分别为 `init/add/remove/install/update/tree/why/check/test/run/build/clean/doctor`。`add` 默认从 GitHub 取包：`json` 和 `yanxu-json` 都解析为 `yanxulang/yanxu-json`，`other-org/yanxu-json` 则直接使用指定组织和仓库。本地别名会省略 `yanxu-` 前缀；`--package` 可覆盖仓库内的实际包名。显式 `--git`、`--path` 和 `--registry` 仍可用于自定义来源。
+
+使用 `--manifest-path <目录>`指定项目；`add/remove`在重新解析失败时恢复清单和锁文件；`--no-lock`可只编辑清单。
 
 `outdated`与`update --dry-run`只生成更新计划而不改写锁文件；`pack`生成固定时间戳、顺序和元数据的 `.yxp`；`vendor`复制完整锁定图供脱离原始依赖位置恢复；`audit`复核校验和、来源、许可证、重复版本和原生制品。
 
