@@ -36,7 +36,7 @@ concurrency:
 
 env:
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-  YANXU_VERSION: "1.1.6"
+  YANXU_VERSION: "1.1.7"
 
 jobs:
   validate:
@@ -58,7 +58,7 @@ jobs:
           toolchain="$(sed -n 's/^言序 = "\([^"]*\)"$/\1/p' 言序.toml)"
           test -n "$version"
           test "$RELEASE_TAG" = "v$version"
-          test "$toolchain" = ">=1.1.6"
+          test "$toolchain" = ">=1.1.7"
           grep -Fqx "## $version" CHANGELOG.md
           git fetch origin main --no-tags
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
@@ -265,7 +265,7 @@ jobs:
 
           ### 安装
 
-          请先安装言序 1.1.6 或更高版本，并确保 `yanxu` 位于 `PATH` 中。
+          请先安装言序 1.1.7 或更高版本，并确保 `yanxu` 位于 `PATH` 中。
 
           macOS / Linux：
 

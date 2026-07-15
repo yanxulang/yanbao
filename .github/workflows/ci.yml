@@ -14,45 +14,55 @@ permissions:
   contents: read
 
 env:
-  YANXU_VERSION: 1.1.6
+  YANXU_VERSION: 1.1.7
 
 jobs:
   test:
-    name: 言序 1.1.6 / ${{ matrix.os }}
+    name: 言序 1.1.7 / ${{ matrix.target }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+          - target: aarch64-apple-darwin
+            runner: macos-15
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2025
+          - target: aarch64-pc-windows-msvc
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref || github.sha }}
-      - name: 下载言序预构建工具链（Unix）
-        if: runner.os != 'Windows'
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: YanXuLang/yanxu
+          path: yanxu-core
+          ref: main
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          repository: YanXuLang/yanxu-gui
+          path: yanxu-gui
+          ref: main
+      - name: 安装 Linux GUI 开发库
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev
+      - name: 编译言序 1.1.7 工具链
+        run: cargo build --manifest-path yanxu-core/Cargo.toml --locked --bin yanxu
+      - name: 定位工具链
         shell: bash
-        env:
-          YANXU_GITHUB_TOKEN: ${{ github.token }}
-          YANXU_INSTALL_DIR: ${{ runner.temp }}/yanxu/bin
         run: |
-          set -euo pipefail
-          curl --disable --fail --location --silent --show-error \
-            --proto '=https' --tlsv1.2 \
-            "https://raw.githubusercontent.com/YanXuLang/yanxu/v$YANXU_VERSION/scripts/install.sh" \
-            --output "$RUNNER_TEMP/install-yanxu.sh"
-          sh "$RUNNER_TEMP/install-yanxu.sh"
-          echo "YANXU_BIN=$YANXU_INSTALL_DIR/yanxu" >> "$GITHUB_ENV"
-      - name: 下载言序预构建工具链（Windows）
-        if: runner.os == 'Windows'
-        shell: pwsh
-        env:
-          YANXU_GITHUB_TOKEN: ${{ github.token }}
-          YANXU_INSTALL_DIR: ${{ runner.temp }}\yanxu\bin
-        run: |
-          $Script = Join-Path $env:RUNNER_TEMP "install-yanxu.ps1"
-          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/YanXuLang/yanxu/v$env:YANXU_VERSION/scripts/install.ps1" -OutFile $Script
-          & $Script
-          "YANXU_BIN=$env:YANXU_INSTALL_DIR\yanxu.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
+          echo "YANXU_BIN=$GITHUB_WORKSPACE/yanxu-core/target/debug/yanxu$suffix" >> "$GITHUB_ENV"
       - name: 检查纯言序实现与 Unix 脚本
         if: runner.os != 'Windows'
         shell: bash
@@ -106,7 +116,7 @@ jobs:
           cp src/*.yx "$compile_source/"
           "$YANXU_BIN" compile "$compile_source/主.yx" -o "$app" --release --standalone
           version_output="$(YANXU_BIN="$YANXU_BIN" "$app" --version | tr -d '\r')"
-          expected="$(printf '言包 0.4.0\n言序 1.1.6')"
+          expected="$(printf '言包 0.5.0\n言序 1.1.7')"
           test "$version_output" = "$expected"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             cp "$app" yanbao-app.exe
@@ -126,3 +136,17 @@ jobs:
           ./yanbao doctor --manifest-path "$project"
           ./yanbao build --manifest-path "$project" --release
           ./yanbao run --manifest-path "$project"
+      - name: 言窗工程创建、检查与 Bundle 端到端
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(rustc -vV | sed -n 's/^host: //p')" = "${{ matrix.target }}"
+          cargo test --manifest-path yanxu-gui/Cargo.toml --workspace --locked
+          cargo build --manifest-path yanxu-gui/Cargo.toml --workspace --release --locked
+          ./yanxu-gui/scripts/prepare-current.sh
+          project="$RUNNER_TEMP/yanbao-gui-e2e"
+          rm -rf "$project"
+          ./yanbao new "$project" --name CI言窗 --gui --gui-path "$GITHUB_WORKSPACE/yanxu-gui" --force
+          ./yanbao check --manifest-path "$project"
+          ./yanbao bundle --manifest-path "$project"
+          test "$(find "$project/build" -name bundle-manifest.json -type f | wc -l)" -eq 1

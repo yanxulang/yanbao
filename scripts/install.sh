@@ -23,7 +23,7 @@ need curl
 need tar
 need install
 YANXU_BIN="${YANXU_BIN:-yanxu}"
-command -v "$YANXU_BIN" >/dev/null 2>&1 || fail "需要先安装言序 1.1.6 或更高版本（yanxu），也可通过 YANXU_BIN 指定其路径"
+command -v "$YANXU_BIN" >/dev/null 2>&1 || fail "需要先安装言序 1.1.7 或更高版本（yanxu），也可通过 YANXU_BIN 指定其路径"
 export YANXU_BIN
 
 case "$(uname -s)" in
