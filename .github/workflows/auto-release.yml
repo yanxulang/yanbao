@@ -48,6 +48,12 @@ jobs:
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
             git fetch origin "refs/tags/$tag:refs/tags/$tag"
             if ! gh release view "$tag" >/dev/null 2>&1; then
+              tagged_commit="$(git rev-list -n 1 "$tag")"
+              if test "$tagged_commit" != "$GITHUB_SHA"; then
+                git tag -d "$tag"
+                git tag -a "$tag" -m "言包 $version"
+                git push --force origin "refs/tags/$tag"
+              fi
               should_release=true
             fi
           else
