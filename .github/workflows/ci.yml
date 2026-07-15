@@ -43,6 +43,12 @@ jobs:
         run: |
           if (Test-Path Cargo.toml) { throw "言包不得包含 Cargo 工程" }
           if (Get-ChildItem src -Filter *.rs -Recurse) { throw "言包源码必须完全使用言序" }
+          $CmdText = [System.Text.Encoding]::UTF8.GetString(
+            [System.IO.File]::ReadAllBytes((Resolve-Path "yanbao.cmd"))
+          )
+          if (-not $CmdText.Contains("`r`n") -or $CmdText.Replace("`r`n", "").Contains("`n")) {
+            throw "yanbao.cmd 必须只使用 CRLF 换行"
+          }
           foreach ($Path in @("yanbao.ps1", "scripts/install.ps1")) {
             $Tokens = $null
             $Errors = $null

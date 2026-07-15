@@ -10,12 +10,22 @@ on:
         description: 要发布的标签（例如 v0.2.0）
         required: true
         type: string
+      build_only:
+        description: 只构建和校验制品，不创建 Release
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       tag:
         description: 要发布的标签
         required: true
         type: string
+      build_only:
+        description: 只构建和校验制品
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -168,11 +178,24 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "言包独立应用编译失败" }
           Copy-Item $env:YANXU_BIN (Join-Path $Stage "yanxu-1.1.5.exe")
           Copy-Item yanbao.cmd, yanbao.ps1, LICENSE, README.md, CHANGELOG.md $Stage
+          $CmdPath = Join-Path $Stage "yanbao.cmd"
+          $CmdText = [System.IO.File]::ReadAllText($CmdPath).Replace("`r`n", "`n").Replace("`n", "`r`n")
+          [System.IO.File]::WriteAllText($CmdPath, $CmdText, [System.Text.UTF8Encoding]::new($false))
           $PreviousYanxu = $env:YANXU_BIN
           try {
             $env:YANXU_BIN = Join-Path $Stage "yanxu-1.1.5.exe"
+            $RuntimeOutput = @(& $env:YANXU_BIN --version 2>&1)
+            $RuntimeExit = $LASTEXITCODE
+            Write-Host "捆绑运行时：$($RuntimeOutput -join ' ')"
+            if ($RuntimeExit -ne 0) { throw "捆绑言序运行时不能运行（退出码 $RuntimeExit）" }
+            $DirectOutput = @(& $App --version 2>&1)
+            $DirectExit = $LASTEXITCODE
+            Write-Host "独立应用：$($DirectOutput -join ' ')"
+            if ($DirectExit -ne 0) { throw "言包独立应用不能运行（退出码 $DirectExit）" }
             $VersionOutput = @(& (Join-Path $Stage "yanbao.cmd") --version 2>&1)
-            if ($LASTEXITCODE -ne 0) { throw "言包发行包不能运行" }
+            $LauncherExit = $LASTEXITCODE
+            Write-Host "CMD 启动器：$($VersionOutput -join ' ')"
+            if ($LauncherExit -ne 0) { throw "言包发行启动器不能运行（退出码 $LauncherExit）" }
             if ($VersionOutput -notcontains "言包 $env:VERSION") { throw "言包版本不一致" }
             if ($VersionOutput -notcontains "言序 1.1.5") { throw "言序工具链版本不一致" }
             $Project = Join-Path $env:RUNNER_TEMP "yanbao-release-e2e"
@@ -198,6 +221,7 @@ jobs:
 
   publish:
     name: 发布 GitHub Release
+    if: ${{ !inputs.build_only }}
     needs: [validate, build]
     runs-on: ubuntu-latest
     outputs:
