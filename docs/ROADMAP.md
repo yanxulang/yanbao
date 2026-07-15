@@ -1,5 +1,12 @@
 # 言包路线图
 
+## 0.5.0：言序 1.1.7 GUI 工程（进行中）
+
+- 通过共享工程协议生成`yanxu-gui`项目模板、应用元数据和独立 GUI 权限；
+- 同时握手 ABI v1/v2，锁定并校验当前目标原生后端；
+- `build --bundle`生成 macOS `.app`、Windows GUI 目录或 Linux AppDir；
+- 六目标原生 runner 分别构建言窗后端并执行 GUI 工程、Bundle 与摘要门禁。
+
 ## 0.4.0：GitHub 默认包源（已完成）
 
 - `add` 默认将短包名映射到 `yanxulang/yanxu-<包名>`；

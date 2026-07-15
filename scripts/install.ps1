@@ -47,7 +47,7 @@ $Version = if ($env:YANBAO_VERSION) { $env:YANBAO_VERSION } else { "latest" }
 $InstallDir = if ($env:YANBAO_INSTALL_DIR) { $env:YANBAO_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "Programs\Yanbao\bin" }
 $Yanxu = if ($env:YANXU_BIN) { $env:YANXU_BIN } else { "yanxu" }
 if (-not (Get-Command $Yanxu -ErrorAction SilentlyContinue)) {
-    throw "Yanbao installation failed: Yanxu 1.1.6 or newer is required; install yanxu or set YANXU_BIN"
+    throw "Yanbao installation failed: Yanxu 1.1.7 or newer is required; install yanxu or set YANXU_BIN"
 }
 $env:YANXU_BIN = $Yanxu
 try {
