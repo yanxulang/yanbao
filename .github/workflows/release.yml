@@ -10,12 +10,22 @@ on:
         description: 要发布的标签（例如 v0.2.0）
         required: true
         type: string
+      build_only:
+        description: 只构建和校验制品，不创建 Release
+        required: false
+        default: false
+        type: boolean
   workflow_call:
     inputs:
       tag:
         description: 要发布的标签
         required: true
         type: string
+      build_only:
+        description: 只构建和校验制品
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -168,6 +178,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "言包独立应用编译失败" }
           Copy-Item $env:YANXU_BIN (Join-Path $Stage "yanxu-1.1.5.exe")
           Copy-Item yanbao.cmd, yanbao.ps1, LICENSE, README.md, CHANGELOG.md $Stage
+          $CmdPath = Join-Path $Stage "yanbao.cmd"
+          $CmdText = [System.IO.File]::ReadAllText($CmdPath).Replace("`r`n", "`n").Replace("`n", "`r`n")
+          [System.IO.File]::WriteAllText($CmdPath, $CmdText, [System.Text.UTF8Encoding]::new($false))
           $PreviousYanxu = $env:YANXU_BIN
           try {
             $env:YANXU_BIN = Join-Path $Stage "yanxu-1.1.5.exe"
@@ -208,6 +221,7 @@ jobs:
 
   publish:
     name: 发布 GitHub Release
+    if: ${{ !inputs.build_only }}
     needs: [validate, build]
     runs-on: ubuntu-latest
     outputs:
