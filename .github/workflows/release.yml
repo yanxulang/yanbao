@@ -27,6 +27,7 @@ concurrency:
 env:
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
   YANXU_VERSION: "1.1.5"
+  YANXU_RELEASE_VERSION: "1.1.5-fix"
 
 jobs:
   validate:
@@ -91,11 +92,12 @@ jobs:
         env:
           YANXU_GITHUB_TOKEN: ${{ github.token }}
           YANXU_INSTALL_DIR: ${{ runner.temp }}/yanxu/bin
+          YANXU_VERSION: ${{ env.YANXU_RELEASE_VERSION }}
         run: |
           set -euo pipefail
           curl --disable --fail --location --silent --show-error \
             --proto '=https' --tlsv1.2 \
-            https://raw.githubusercontent.com/YanXuLang/yanxu/v1.1.5/scripts/install.sh \
+            "https://raw.githubusercontent.com/YanXuLang/yanxu/v$YANXU_RELEASE_VERSION/scripts/install.sh" \
             --output "$RUNNER_TEMP/install-yanxu.sh"
           sh "$RUNNER_TEMP/install-yanxu.sh"
           echo "YANXU_BIN=$YANXU_INSTALL_DIR/yanxu" >> "$GITHUB_ENV"
@@ -105,9 +107,10 @@ jobs:
         env:
           YANXU_GITHUB_TOKEN: ${{ github.token }}
           YANXU_INSTALL_DIR: ${{ runner.temp }}\yanxu\bin
+          YANXU_VERSION: ${{ env.YANXU_RELEASE_VERSION }}
         run: |
           $Script = Join-Path $env:RUNNER_TEMP "install-yanxu.ps1"
-          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/YanXuLang/yanxu/v1.1.5/scripts/install.ps1" -OutFile $Script
+          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/YanXuLang/yanxu/v$env:YANXU_RELEASE_VERSION/scripts/install.ps1" -OutFile $Script
           & $Script
           "YANXU_BIN=$env:YANXU_INSTALL_DIR\yanxu.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
       - name: 构建并封装（Unix）

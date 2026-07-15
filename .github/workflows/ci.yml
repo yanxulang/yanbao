@@ -21,7 +21,7 @@ jobs:
         with:
           repository: YanXuLang/yanxu
           path: yanxu-core
-          ref: 746490ad6e6875fe82451a0f1ed1b0fc00cb8a26 # v1.1.5
+          ref: e06b65ac625acce6b074c5d92b50d20dd5b7fb80 # v1.1.5-fix（程序版本 1.1.5）
       - name: 编译言序 1.1.5 工具链
         run: cargo build --manifest-path yanxu-core/Cargo.toml --locked --bin yanxu
       - name: 定位工具链
