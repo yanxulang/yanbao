@@ -1,24 +1,70 @@
 $ErrorActionPreference = "Stop"
+# Keep this script ASCII-only so Windows PowerShell 5.1 can run it both as a file and through irm | iex.
+
+function Get-Sha256([string]$Path) {
+    $Stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $Hasher = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return ([System.BitConverter]::ToString($Hasher.ComputeHash($Stream))).Replace("-", "").ToLowerInvariant()
+        } finally {
+            $Hasher.Dispose()
+        }
+    } finally {
+        $Stream.Dispose()
+    }
+}
+
+function Invoke-Utf8Process([string]$Path, [string]$Arguments) {
+    $StartInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $StartInfo.FileName = $Path
+    $StartInfo.Arguments = $Arguments
+    $StartInfo.UseShellExecute = $false
+    $StartInfo.CreateNoWindow = $true
+    $StartInfo.RedirectStandardOutput = $true
+    $StartInfo.RedirectStandardError = $true
+    $StartInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    $StartInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+
+    $Process = New-Object System.Diagnostics.Process
+    $Process.StartInfo = $StartInfo
+    try {
+        if (-not $Process.Start()) { throw "could not start $Path" }
+        $Stdout = $Process.StandardOutput.ReadToEnd()
+        $Stderr = $Process.StandardError.ReadToEnd()
+        $Process.WaitForExit()
+        return [pscustomobject]@{
+            ExitCode = $Process.ExitCode
+            Text = ($Stdout + $Stderr).Trim()
+        }
+    } finally {
+        $Process.Dispose()
+    }
+}
 
 $Repository = if ($env:YANBAO_REPOSITORY) { $env:YANBAO_REPOSITORY } else { "YanXuLang/yanbao" }
 $Version = if ($env:YANBAO_VERSION) { $env:YANBAO_VERSION } else { "latest" }
 $InstallDir = if ($env:YANBAO_INSTALL_DIR) { $env:YANBAO_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "Programs\Yanbao\bin" }
 $Yanxu = if ($env:YANXU_BIN) { $env:YANXU_BIN } else { "yanxu" }
 if (-not (Get-Command $Yanxu -ErrorAction SilentlyContinue)) {
-    throw "言包安装失败：需要先安装言序 1.1.6 或更高版本（yanxu），也可通过 YANXU_BIN 指定其路径"
+    throw "Yanbao installation failed: Yanxu 1.1.6 or newer is required; install yanxu or set YANXU_BIN"
 }
 $env:YANXU_BIN = $Yanxu
 try {
     $InstallDir = [System.IO.Path]::GetFullPath($InstallDir)
 } catch {
-    throw "言包安装失败：安装目录无效：$($_.Exception.Message)"
+    throw "Yanbao installation failed: invalid installation directory: $($_.Exception.Message)"
 }
 
-$Architecture = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+$Architecture = if ($env:PROCESSOR_ARCHITEW6432) {
+    $env:PROCESSOR_ARCHITEW6432
+} else {
+    $env:PROCESSOR_ARCHITECTURE
+}
 switch ($Architecture) {
-    "X64" { $Target = "x86_64-pc-windows-msvc" }
-    "Arm64" { $Target = "aarch64-pc-windows-msvc" }
-    default { throw "言包安装失败：暂不支持处理器架构 $Architecture" }
+    "AMD64" { $Target = "x86_64-pc-windows-msvc" }
+    "ARM64" { $Target = "aarch64-pc-windows-msvc" }
+    default { throw "Yanbao installation failed: unsupported processor architecture $Architecture" }
 }
 
 $Headers = @{}
@@ -33,46 +79,48 @@ if ($Version -eq "latest") {
         }
         if ($env:YANBAO_GITHUB_TOKEN) { $ApiHeaders.Authorization = "Bearer $($env:YANBAO_GITHUB_TOKEN)" }
         $Release = Invoke-RestMethod -Headers $ApiHeaders -Uri "https://api.github.com/repos/$Repository/releases/latest"
-        if (-not $Release.tag_name) { throw "仓库尚未发布可安装版本" }
+        if (-not $Release.tag_name) { throw "the repository has no installable release" }
         $Tag = $Release.tag_name
-        $VersionLabel = "最新版 $Tag"
+        $VersionLabel = "latest release $Tag"
     } catch {
-        throw "言包安装失败：无法查询最新发行版：$($_.Exception.Message)"
+        throw "Yanbao installation failed: could not query the latest release: $($_.Exception.Message)"
     }
 } else {
-    $Tag = if ($Version.StartsWith("v")) { $Version } else { "v$Version" }
+    $Tag = if ($Version -match "^v") { $Version } else { "v$Version" }
     $VersionLabel = $Tag
 }
 $BaseUrl = "https://github.com/$Repository/releases/download/$Tag"
-$ReleaseVersion = if ($Tag.StartsWith("v")) { $Tag.Substring(1) } else { $Tag }
+$ReleaseVersion = $Tag -replace "^v", ""
 
 $TempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("yanbao-" + [guid]::NewGuid())
 New-Item -ItemType Directory -Path $TempDir | Out-Null
 $Staged = @()
 
 try {
-    Write-Host "正在安装言包 $VersionLabel（$Target）…"
+    Write-Host "Installing Yanbao $VersionLabel ($Target)..."
     $ArchivePath = Join-Path $TempDir $Asset
     $ChecksumPath = Join-Path $TempDir $ChecksumAsset
     Invoke-WebRequest -UseBasicParsing -Headers $Headers -Uri "$BaseUrl/$Asset" -OutFile $ArchivePath
     Invoke-WebRequest -UseBasicParsing -Headers $Headers -Uri "$BaseUrl/$ChecksumAsset" -OutFile $ChecksumPath
 
     $Expected = ((Get-Content $ChecksumPath -Raw).Trim() -split "\s+")[0]
-    if ($Expected -notmatch "^[0-9A-Fa-f]{64}$") { throw "SHA-256 校验文件格式无效" }
+    if ($Expected -notmatch "^[0-9A-Fa-f]{64}$") { throw "invalid SHA-256 checksum file" }
     $Expected = $Expected.ToLowerInvariant()
-    $Actual = (Get-FileHash -Algorithm SHA256 $ArchivePath).Hash.ToLowerInvariant()
-    if ($Expected -ne $Actual) { throw "SHA-256 校验不一致" }
+    $Actual = Get-Sha256 $ArchivePath
+    if ($Expected -ne $Actual) { throw "SHA-256 checksum mismatch" }
 
     $Expanded = Join-Path $TempDir "expanded"
     Expand-Archive -Path $ArchivePath -DestinationPath $Expanded
     $Required = @("yanbao.cmd", "yanbao.ps1", "yanbao-app.exe")
     foreach ($Name in $Required) {
-        if (-not (Test-Path (Join-Path $Expanded $Name))) { throw "发行包缺少 $Name" }
+        if (-not (Test-Path (Join-Path $Expanded $Name))) { throw "the release archive is missing $Name" }
     }
 
-    $VersionOutput = @(& (Join-Path $Expanded "yanbao.cmd") --version 2>&1)
-    if ($LASTEXITCODE -ne 0) { throw "发行包不能使用本机言序运行：$($VersionOutput -join [Environment]::NewLine)" }
-    if ($VersionOutput -notcontains "言包 $ReleaseVersion") { throw "发行包版本不是言包 $ReleaseVersion" }
+    $VersionProbe = Invoke-Utf8Process (Join-Path $Expanded "yanbao-app.exe") "--version"
+    if ($VersionProbe.ExitCode -ne 0) { throw "the release archive cannot run with the installed Yanxu: $($VersionProbe.Text)" }
+    $ProductName = [string]::Concat([char]0x8A00, [char]0x5305)
+    $ExpectedVersion = "$ProductName $ReleaseVersion"
+    if (@($VersionProbe.Text -split "\r?\n") -notcontains $ExpectedVersion) { throw "release archive version is not $ExpectedVersion" }
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     foreach ($Name in $Required) {
         $Temporary = Join-Path $InstallDir (".$Name." + [guid]::NewGuid() + ".tmp")
@@ -89,15 +137,15 @@ try {
     $PathParts = @($UserPath -split ";" | Where-Object { $_ })
     if ($PathParts -notcontains $InstallDir) {
         [Environment]::SetEnvironmentVariable("Path", (($PathParts + $InstallDir) -join ";"), "User")
-        Write-Host "已把 $InstallDir 加入用户 PATH；新终端会自动生效。"
+        Write-Host "Added $InstallDir to the user PATH; it will be available in new terminals."
     }
     if (@($env:Path -split ";") -notcontains $InstallDir) { $env:Path = "$env:Path;$InstallDir" }
-    $InstalledVersion = @(& (Join-Path $InstallDir "yanbao.cmd") --version 2>&1)
-    if ($LASTEXITCODE -ne 0) { throw "安装后验证失败：$($InstalledVersion -join [Environment]::NewLine)" }
-    Write-Host "言包已安装到 $InstallDir"
-    Write-Host "已验证：$($InstalledVersion -join ' ')"
+    $InstalledVersion = Invoke-Utf8Process (Join-Path $InstallDir "yanbao-app.exe") "--version"
+    if ($InstalledVersion.ExitCode -ne 0) { throw "post-install verification failed: $($InstalledVersion.Text)" }
+    Write-Host "Yanbao was installed to $InstallDir"
+    Write-Host "Verified: $($InstalledVersion.Text -replace '[\r\n]+', ' ')"
 } catch {
-    Write-Error "言包安装失败：$($_.Exception.Message)"
+    Write-Error "Yanbao installation failed: $($_.Exception.Message)"
     exit 1
 } finally {
     foreach ($Path in $Staged) { Remove-Item -Force -ErrorAction SilentlyContinue $Path }
