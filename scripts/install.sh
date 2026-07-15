@@ -85,14 +85,14 @@ fi
 expanded="$tmp_dir/expanded"
 mkdir -p "$expanded"
 tar -xzf "$tmp_dir/$asset" -C "$expanded"
-for required in yanbao yanbao-app yanxu-1.1.5; do
+for required in yanbao yanbao-app yanxu-1.1.6; do
   [ -f "$expanded/$required" ] || fail "发行包缺少 $required"
 done
-chmod 755 "$expanded/yanbao" "$expanded/yanbao-app" "$expanded/yanxu-1.1.5"
+chmod 755 "$expanded/yanbao" "$expanded/yanbao-app" "$expanded/yanxu-1.1.6"
 
-version_output="$(YANXU_BIN="$expanded/yanxu-1.1.5" "$expanded/yanbao" --version 2>&1)" || fail "发行包不能运行：$version_output"
+version_output="$(YANXU_BIN="$expanded/yanxu-1.1.6" "$expanded/yanbao" --version 2>&1)" || fail "发行包不能运行：$version_output"
 printf '%s\n' "$version_output" | grep -Fqx "言包 $release_version" || fail "发行包版本不是言包 $release_version"
-printf '%s\n' "$version_output" | grep -Fqx "言序 1.1.5" || fail "发行包不是由言序 1.1.5 工具链提供服务"
+printf '%s\n' "$version_output" | grep -Fqx "言序 1.1.6" || fail "发行包不是由言序 1.1.6 工具链提供服务"
 
 mkdir -p "$INSTALL_DIR"
 stage_launcher="$(mktemp "$INSTALL_DIR/.yanbao-launcher.XXXXXX")" || fail "不能创建安装临时文件"
@@ -100,8 +100,8 @@ stage_app="$(mktemp "$INSTALL_DIR/.yanbao-app.XXXXXX")" || fail "不能创建安
 stage_runtime="$(mktemp "$INSTALL_DIR/.yanxu-runtime.XXXXXX")" || fail "不能创建安装临时文件"
 install -m 755 "$expanded/yanbao" "$stage_launcher"
 install -m 755 "$expanded/yanbao-app" "$stage_app"
-install -m 755 "$expanded/yanxu-1.1.5" "$stage_runtime"
-mv -f "$stage_runtime" "$INSTALL_DIR/yanxu-1.1.5"; stage_runtime=""
+install -m 755 "$expanded/yanxu-1.1.6" "$stage_runtime"
+mv -f "$stage_runtime" "$INSTALL_DIR/yanxu-1.1.6"; stage_runtime=""
 mv -f "$stage_app" "$INSTALL_DIR/yanbao-app"; stage_app=""
 mv -f "$stage_launcher" "$INSTALL_DIR/yanbao"; stage_launcher=""
 

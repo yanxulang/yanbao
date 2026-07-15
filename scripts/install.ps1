@@ -61,16 +61,16 @@ try {
 
     $Expanded = Join-Path $TempDir "expanded"
     Expand-Archive -Path $ArchivePath -DestinationPath $Expanded
-    $Required = @("yanbao.cmd", "yanbao.ps1", "yanbao-app.exe", "yanxu-1.1.5.exe")
+    $Required = @("yanbao.cmd", "yanbao.ps1", "yanbao-app.exe", "yanxu-1.1.6.exe")
     foreach ($Name in $Required) {
         if (-not (Test-Path (Join-Path $Expanded $Name))) { throw "发行包缺少 $Name" }
     }
 
-    $env:YANXU_BIN = Join-Path $Expanded "yanxu-1.1.5.exe"
+    $env:YANXU_BIN = Join-Path $Expanded "yanxu-1.1.6.exe"
     $VersionOutput = @(& (Join-Path $Expanded "yanbao.cmd") --version 2>&1)
     if ($LASTEXITCODE -ne 0) { throw "发行包不能运行：$($VersionOutput -join [Environment]::NewLine)" }
     if ($VersionOutput -notcontains "言包 $ReleaseVersion") { throw "发行包版本不是言包 $ReleaseVersion" }
-    if ($VersionOutput -notcontains "言序 1.1.5") { throw "发行包不是由言序 1.1.5 工具链提供服务" }
+    if ($VersionOutput -notcontains "言序 1.1.6") { throw "发行包不是由言序 1.1.6 工具链提供服务" }
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     foreach ($Name in $Required) {
         $Temporary = Join-Path $InstallDir (".$Name." + [guid]::NewGuid() + ".tmp")

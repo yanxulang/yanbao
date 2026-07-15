@@ -36,8 +36,8 @@ concurrency:
 
 env:
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-  YANXU_VERSION: "1.1.5"
-  YANXU_RELEASE_VERSION: "1.1.5-fix"
+  YANXU_VERSION: "1.1.6"
+  YANXU_RELEASE_VERSION: "1.1.6"
 
 jobs:
   validate:
@@ -59,16 +59,23 @@ jobs:
           toolchain="$(sed -n 's/^言序 = "\([^"]*\)"$/\1/p' 言序.toml)"
           test -n "$version"
           test "$RELEASE_TAG" = "v$version"
-          test "$toolchain" = ">=1.1.5"
+          test "$toolchain" = ">=1.1.6"
           grep -Fqx "## $version" CHANGELOG.md
           git fetch origin main --no-tags
-          git merge-base --is-ancestor HEAD origin/main
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
           test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$(git rev-parse HEAD)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+  quality:
+    name: 标签提交完整质量门禁
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ inputs.tag || github.ref_name }}
+
   build:
     name: 构建 ${{ matrix.target }}
-    needs: validate
+    needs: [validate, quality]
     strategy:
       fail-fast: false
       matrix:
@@ -96,7 +103,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ env.RELEASE_TAG }}
-      - name: 安装言序 1.1.5（Unix）
+      - name: 安装言序 1.1.6（Unix）
         if: matrix.windows == false
         shell: bash
         env:
@@ -111,7 +118,7 @@ jobs:
             --output "$RUNNER_TEMP/install-yanxu.sh"
           sh "$RUNNER_TEMP/install-yanxu.sh"
           echo "YANXU_BIN=$YANXU_INSTALL_DIR/yanxu" >> "$GITHUB_ENV"
-      - name: 安装言序 1.1.5（Windows）
+      - name: 安装言序 1.1.6（Windows）
         if: matrix.windows == true
         shell: pwsh
         env:
@@ -140,15 +147,15 @@ jobs:
           mkdir -p "$compile_source"
           cp src/*.yx "$compile_source/"
           "$YANXU_BIN" compile "$compile_source/主.yx" -o "$stage/yanbao-app" --release --standalone
-          install -m 755 "$YANXU_BIN" "$stage/yanxu-1.1.5"
+          install -m 755 "$YANXU_BIN" "$stage/yanxu-1.1.6"
           install -m 755 yanbao "$stage/yanbao"
           install -m 644 LICENSE README.md CHANGELOG.md "$stage/"
-          version_output="$(YANXU_BIN="$stage/yanxu-1.1.5" "$stage/yanbao" --version | tr -d '\r')"
-          expected="$(printf '言包 %s\n言序 1.1.5' "$VERSION")"
+          version_output="$(YANXU_BIN="$stage/yanxu-1.1.6" "$stage/yanbao" --version | tr -d '\r')"
+          expected="$(printf '言包 %s\n言序 1.1.6' "$VERSION")"
           test "$version_output" = "$expected"
           project="$RUNNER_TEMP/yanbao-release-e2e"
-          YANXU_BIN="$stage/yanxu-1.1.5" "$stage/yanbao" init "$project" --name 发行验收 --force
-          YANXU_BIN="$stage/yanxu-1.1.5" "$stage/yanbao" doctor --manifest-path "$project"
+          YANXU_BIN="$stage/yanxu-1.1.6" "$stage/yanbao" init "$project" --name 发行验收 --force
+          YANXU_BIN="$stage/yanxu-1.1.6" "$stage/yanbao" doctor --manifest-path "$project"
           asset="yanbao-$TARGET.tar.gz"
           tar -C "$stage" -czf "dist/$asset" .
           if command -v sha256sum >/dev/null 2>&1; then
@@ -176,14 +183,14 @@ jobs:
           $App = Join-Path $Stage "yanbao-app.exe"
           & $env:YANXU_BIN compile (Join-Path $CompileSource "主.yx") -o $App --release --standalone
           if ($LASTEXITCODE -ne 0) { throw "言包独立应用编译失败" }
-          Copy-Item $env:YANXU_BIN (Join-Path $Stage "yanxu-1.1.5.exe")
+          Copy-Item $env:YANXU_BIN (Join-Path $Stage "yanxu-1.1.6.exe")
           Copy-Item yanbao.cmd, yanbao.ps1, LICENSE, README.md, CHANGELOG.md $Stage
           $CmdPath = Join-Path $Stage "yanbao.cmd"
           $CmdText = [System.IO.File]::ReadAllText($CmdPath).Replace("`r`n", "`n").Replace("`n", "`r`n")
           [System.IO.File]::WriteAllText($CmdPath, $CmdText, [System.Text.UTF8Encoding]::new($false))
           $PreviousYanxu = $env:YANXU_BIN
           try {
-            $env:YANXU_BIN = Join-Path $Stage "yanxu-1.1.5.exe"
+            $env:YANXU_BIN = Join-Path $Stage "yanxu-1.1.6.exe"
             $RuntimeOutput = @(& $env:YANXU_BIN --version 2>&1)
             $RuntimeExit = $LASTEXITCODE
             Write-Host "捆绑运行时：$($RuntimeOutput -join ' ')"
@@ -197,7 +204,7 @@ jobs:
             Write-Host "CMD 启动器：$($VersionOutput -join ' ')"
             if ($LauncherExit -ne 0) { throw "言包发行启动器不能运行（退出码 $LauncherExit）" }
             if ($VersionOutput -notcontains "言包 $env:VERSION") { throw "言包版本不一致" }
-            if ($VersionOutput -notcontains "言序 1.1.5") { throw "言序工具链版本不一致" }
+            if ($VersionOutput -notcontains "言序 1.1.6") { throw "言序工具链版本不一致" }
             $Project = Join-Path $env:RUNNER_TEMP "yanbao-release-e2e"
             & (Join-Path $Stage "yanbao.cmd") init $Project --name 发行验收 --force
             if ($LASTEXITCODE -ne 0) { throw "言包不能在发行目录外创建工程" }
@@ -220,7 +227,7 @@ jobs:
           retention-days: 7
 
   publish:
-    name: 发布 GitHub Release
+    name: 上传并暂存 Release 草稿
     if: ${{ !inputs.build_only }}
     needs: [validate, build]
     runs-on: ubuntu-latest
@@ -290,17 +297,32 @@ jobs:
             gh release upload "$RELEASE_TAG" dist/* --clobber
             gh release edit "$RELEASE_TAG" \
               --title "言包 $VERSION" --notes-file release-notes.md \
-              --draft=false --prerelease=false --latest --verify-tag
+              --draft=true --prerelease=false --verify-tag
           else
             gh release create "$RELEASE_TAG" dist/* \
               --title "言包 $VERSION" --notes-file release-notes.md \
-              --draft=false --prerelease=false --latest --verify-tag
+              --draft --prerelease=false --verify-tag
           fi
           echo "url=$(gh release view "$RELEASE_TAG" --json url --jq .url)" >> "$GITHUB_OUTPUT"
 
+  publicize:
+    name: 六平台制品完成后公开 Release
+    if: ${{ !inputs.build_only }}
+    needs: [validate, build, publish]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 公开已经完整上传的草稿
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --draft=false --prerelease=false --latest --verify-tag \
+            --title "言包 $VERSION"
+
   smoke:
     name: 安装冒烟 / ${{ matrix.os }}
-    needs: [validate, publish]
+    needs: [validate, publicize]
     strategy:
       fail-fast: false
       matrix:
@@ -321,7 +343,7 @@ jobs:
           set -euo pipefail
           sh scripts/install.sh
           version_output="$("$YANBAO_INSTALL_DIR/yanbao" --version | tr -d '\r')"
-          expected="$(printf '言包 %s\n言序 1.1.5' "$YANBAO_VERSION")"
+          expected="$(printf '言包 %s\n言序 1.1.6' "$YANBAO_VERSION")"
           test "$version_output" = "$expected"
       - name: 安装并验证（Windows）
         if: runner.os == 'Windows'
@@ -335,11 +357,11 @@ jobs:
           $Output = @(& "$env:YANBAO_INSTALL_DIR\yanbao.cmd" --version 2>&1)
           if ($LASTEXITCODE -ne 0) { throw "安装后的言包不能运行" }
           if ($Output -notcontains "言包 $env:YANBAO_VERSION") { throw "言包版本不一致" }
-          if ($Output -notcontains "言序 1.1.5") { throw "言序工具链版本不一致" }
+          if ($Output -notcontains "言序 1.1.6") { throw "言序工具链版本不一致" }
 
   finalize:
     name: 确认正式发行
-    needs: [publish, smoke]
+    needs: [publicize, smoke]
     runs-on: ubuntu-latest
     steps:
       - name: 确认 Release 可见且为 latest
@@ -353,8 +375,8 @@ jobs:
 
   quarantine:
     name: 隔离冒烟失败的发行版
-    if: ${{ always() && needs.publish.result == 'success' && needs.smoke.result != 'success' }}
-    needs: [publish, smoke]
+    if: ${{ always() && needs.publicize.result == 'success' && needs.smoke.result != 'success' }}
+    needs: [publicize, smoke]
     runs-on: ubuntu-latest
     steps:
       - name: 转为草稿并使工作流失败

@@ -3,13 +3,13 @@
 [![CI](https://github.com/YanXuLang/yanbao/actions/workflows/ci.yml/badge.svg)](https://github.com/YanXuLang/yanbao/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-c43b2f)](LICENSE)
 
-言包（`yanbao`）是言序的官方工程与包管理工具。自 0.2.0 起，命令层完全由言序语言编写；仓库不再包含 Cargo 工程或 Rust 业务代码。使用言包之前须先安装言序 1.1.5 或更高版本。
+言包（`yanbao`）是言序的官方工程与包管理工具。自 0.2.0 起，命令层完全由言序语言编写；仓库不包含 Cargo 工程或 Rust 业务代码。安装正式 Release 时无需预先安装言序：发行包包含由言序源码编译的 standalone 和仅供工程子命令使用的专用言序运行时；只有从源码参与开发时才需要言序 1.1.6 或更高版本。
 
 言包负责命令分派、项目工作流、事务回滚、诊断和用户输出；`言序.toml`、`言序.lock`、完整依赖图、模块导出和 YXB 构建全部通过言序的版本化 JSON 工程协议完成。因此，言包不会复制第二套 TOML、语义化版本或依赖选择实现。
 
 ## 安装
 
-正式发行包由上游`v1.1.5-fix`发行制品中的言序 1.1.5 编译，包含当前平台的`yanbao`独立应用和专用言序 1.1.5 工程运行时；不会覆盖系统中已有的`yanxu`。
+正式发行包由上游`v1.1.6`同一稳定提交的言序 1.1.6 编译，包含当前平台的`yanbao`独立应用和专用言序 1.1.6 工程运行时；不会覆盖系统中已有的`yanxu`，也不把任何包管理业务改写为 Rust。
 
 macOS / Linux：
 
@@ -23,11 +23,11 @@ Windows PowerShell：
 irm https://raw.githubusercontent.com/YanXuLang/yanbao/main/scripts/install.ps1 | iex
 ```
 
-安装器按操作系统与 x86-64/ARM64 选择制品，强制验证独立 SHA-256 文件，再运行`yanbao --version`确认言包 0.2.0 与言序 1.1.5。可分别用`YANBAO_INSTALL_DIR`、`YANBAO_VERSION`和`YANBAO_GITHUB_TOKEN`覆盖安装目录、版本和 GitHub API 凭据。
+安装器按操作系统与 x86-64/ARM64 选择制品，强制验证独立 SHA-256 文件，再运行`yanbao --version`确认言包 0.2.1 与言序 1.1.6。可分别用`YANBAO_INSTALL_DIR`、`YANBAO_VERSION`和`YANBAO_GITHUB_TOKEN`覆盖安装目录、版本和 GitHub API 凭据。
 
 ## 源码运行
 
-参与开发时先安装言序 1.1.5 或更高版本，再克隆本仓库。Unix 使用`yanbao`，Windows 使用`yanbao.cmd`或`yanbao.ps1`：
+参与开发时先安装言序 1.1.6 或更高版本，再克隆本仓库。Unix 使用`yanbao`，Windows 使用`yanbao.cmd`或`yanbao.ps1`：
 
 ```sh
 ./yanbao --help

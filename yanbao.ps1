@@ -1,5 +1,5 @@
 $ErrorActionPreference = "Stop"
-$BundledRuntime = Join-Path $PSScriptRoot "yanxu-1.1.5.exe"
+$BundledRuntime = Join-Path $PSScriptRoot "yanxu-1.1.6.exe"
 $BundledApp = Join-Path $PSScriptRoot "yanbao-app.exe"
 $Yanxu = if ($env:YANXU_BIN) { $env:YANXU_BIN } elseif (Test-Path $BundledRuntime) { $BundledRuntime } else { "yanxu" }
 if ((Test-Path $BundledApp) -and (Test-Path $BundledRuntime)) {

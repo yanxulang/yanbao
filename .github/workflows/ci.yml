@@ -3,13 +3,19 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
 
 jobs:
   test:
-    name: 言序 1.1.5 / ${{ matrix.os }}
+    name: 言序 1.1.6 / ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -17,12 +23,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: YanXuLang/yanxu
           path: yanxu-core
-          ref: e06b65ac625acce6b074c5d92b50d20dd5b7fb80 # v1.1.5-fix（程序版本 1.1.5）
-      - name: 编译言序 1.1.5 工具链
+          ref: v1.1.6
+      - name: 编译言序 1.1.6 工具链
         run: cargo build --manifest-path yanxu-core/Cargo.toml --locked --bin yanxu
       - name: 定位工具链
         shell: bash
@@ -74,7 +82,7 @@ jobs:
           cp src/*.yx "$compile_source/"
           "$YANXU_BIN" compile "$compile_source/主.yx" -o "$app" --release --standalone
           version_output="$(YANXU_BIN="$YANXU_BIN" "$app" --version | tr -d '\r')"
-          expected="$(printf '言包 0.2.0\n言序 1.1.5')"
+          expected="$(printf '言包 0.2.1\n言序 1.1.6')"
           test "$version_output" = "$expected"
           standalone_project="$RUNNER_TEMP/yanbao-standalone-e2e"
           YANXU_BIN="$YANXU_BIN" "$app" init "$standalone_project" --name 独立应用验收 --force

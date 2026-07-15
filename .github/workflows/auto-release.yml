@@ -1,18 +1,6 @@
 name: Auto Release
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "scripts/**"
-      - ".github/workflows/**"
-      - "言序.toml"
-      - "CHANGELOG.md"
-      - "README.md"
-      - "yanbao"
-      - "yanbao.cmd"
-      - "yanbao.ps1"
   workflow_dispatch:
 
 permissions:
@@ -23,8 +11,15 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  quality:
+    name: 发布前完整质量门禁
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ github.sha }}
+
   prepare:
     name: 准备版本标签
+    needs: quality
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.release.outputs.tag }}
@@ -49,19 +44,17 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
             git fetch origin "refs/tags/$tag:refs/tags/$tag"
-            if ! gh release view "$tag" >/dev/null 2>&1; then
-              tagged_commit="$(git rev-list -n 1 "$tag")"
-              if test "$tagged_commit" != "$GITHUB_SHA"; then
-                git tag -d "$tag"
-                git tag -a "$tag" -m "言包 $version"
-                git push --force origin "refs/tags/$tag"
-              fi
-              should_release=true
-            fi
+            tagged_commit="$(git rev-list -n 1 "$tag")"
+            test "$tagged_commit" = "$GITHUB_SHA" || {
+              echo "版本 $version 已由另一提交使用；禁止移动既有标签" >&2
+              exit 1
+            }
+            if ! gh release view "$tag" >/dev/null 2>&1; then should_release=true; fi
           else
             git tag -a "$tag" -m "言包 $version"
             git push origin "$tag"
-            should_release=true
+            # 新标签由 release.yml 的 push 触发器启动唯一一次发布。
+            should_release=false
           fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "should_release=$should_release" >> "$GITHUB_OUTPUT"

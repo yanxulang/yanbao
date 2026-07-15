@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-if [ -x "$SCRIPT_DIR/yanbao-app" ] && [ -x "$SCRIPT_DIR/yanxu-1.1.5" ]; then
-  YANXU_BIN=${YANXU_BIN:-$SCRIPT_DIR/yanxu-1.1.5}
+if [ -x "$SCRIPT_DIR/yanbao-app" ] && [ -x "$SCRIPT_DIR/yanxu-1.1.6" ]; then
+  YANXU_BIN=${YANXU_BIN:-$SCRIPT_DIR/yanxu-1.1.6}
   export YANXU_BIN
   exec "$SCRIPT_DIR/yanbao-app" "$@"
 fi
