@@ -1,5 +1,10 @@
 # 言包路线图
 
+## 0.3.1：Windows PowerShell 5.1 兼容（已完成）
+
+- 修复 Windows 安装器与启动器的 PowerShell 5.1 兼容性；
+- CI 同时验证 Windows PowerShell 5.1 与 PowerShell 7 解析及发行启动链。
+
 ## 0.3.0：复用本机言序（已完成）
 
 - 六目标 standalone 独立发布，制品不再捆绑言序运行时；
