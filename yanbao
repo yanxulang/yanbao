@@ -1,10 +1,13 @@
 #!/bin/sh
 set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-if [ -x "$SCRIPT_DIR/yanbao-app" ] && [ -x "$SCRIPT_DIR/yanxu-1.1.6" ]; then
-  YANXU_BIN=${YANXU_BIN:-$SCRIPT_DIR/yanxu-1.1.6}
-  export YANXU_BIN
+YANXU_BIN=${YANXU_BIN:-yanxu}
+if ! command -v "$YANXU_BIN" >/dev/null 2>&1; then
+  printf '%s\n' "言包需要言序 1.1.6 或更高版本；请先安装 yanxu，或通过 YANXU_BIN 指定其路径。" >&2
+  exit 1
+fi
+export YANXU_BIN
+if [ -x "$SCRIPT_DIR/yanbao-app" ]; then
   exec "$SCRIPT_DIR/yanbao-app" "$@"
 fi
-YANXU_BIN=${YANXU_BIN:-yanxu}
 exec "$YANXU_BIN" "$SCRIPT_DIR/src/主.yx" -- "$@"
