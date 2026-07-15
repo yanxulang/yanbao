@@ -1,5 +1,6 @@
 .yanxu/
 build/
+dist/
 target/
 言序.lock
 *.tmp
