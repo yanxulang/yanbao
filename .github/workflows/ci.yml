@@ -13,6 +13,9 @@ on:
 permissions:
   contents: read
 
+env:
+  YANXU_VERSION: 1.1.6
+
 jobs:
   test:
     name: 言序 1.1.6 / ${{ matrix.os }}
@@ -25,19 +28,31 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref || github.sha }}
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
-          repository: YanXuLang/yanxu
-          path: yanxu-core
-          ref: v1.1.6
-      - name: 编译言序 1.1.6 工具链
-        run: cargo build --manifest-path yanxu-core/Cargo.toml --locked --bin yanxu
-      - name: 定位工具链
+      - name: 下载言序预构建工具链（Unix）
+        if: runner.os != 'Windows'
         shell: bash
+        env:
+          YANXU_GITHUB_TOKEN: ${{ github.token }}
+          YANXU_INSTALL_DIR: ${{ runner.temp }}/yanxu/bin
         run: |
-          suffix=""
-          if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
-          echo "YANXU_BIN=$GITHUB_WORKSPACE/yanxu-core/target/debug/yanxu$suffix" >> "$GITHUB_ENV"
+          set -euo pipefail
+          curl --disable --fail --location --silent --show-error \
+            --proto '=https' --tlsv1.2 \
+            "https://raw.githubusercontent.com/YanXuLang/yanxu/v$YANXU_VERSION/scripts/install.sh" \
+            --output "$RUNNER_TEMP/install-yanxu.sh"
+          sh "$RUNNER_TEMP/install-yanxu.sh"
+          echo "YANXU_BIN=$YANXU_INSTALL_DIR/yanxu" >> "$GITHUB_ENV"
+      - name: 下载言序预构建工具链（Windows）
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          YANXU_GITHUB_TOKEN: ${{ github.token }}
+          YANXU_INSTALL_DIR: ${{ runner.temp }}\yanxu\bin
+        run: |
+          $Script = Join-Path $env:RUNNER_TEMP "install-yanxu.ps1"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/YanXuLang/yanxu/v$env:YANXU_VERSION/scripts/install.ps1" -OutFile $Script
+          & $Script
+          "YANXU_BIN=$env:YANXU_INSTALL_DIR\yanxu.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
       - name: 检查纯言序实现与 Unix 脚本
         if: runner.os != 'Windows'
         shell: bash
@@ -76,6 +91,7 @@ jobs:
       - name: 类型检查与规格测试
         shell: bash
         run: |
+          test "$("$YANXU_BIN" --version | tr -d '\r')" = "言序 $YANXU_VERSION"
           "$YANXU_BIN" check src/主.yx
           "$YANXU_BIN" test tests
       - name: 编译并验证独立应用
