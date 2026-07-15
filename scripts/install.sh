@@ -22,6 +22,9 @@ download() {
 need curl
 need tar
 need install
+YANXU_BIN="${YANXU_BIN:-yanxu}"
+command -v "$YANXU_BIN" >/dev/null 2>&1 || fail "需要先安装言序 1.1.6 或更高版本（yanxu），也可通过 YANXU_BIN 指定其路径"
+export YANXU_BIN
 
 case "$(uname -s)" in
   Darwin) system="apple-darwin" ;;
@@ -56,12 +59,10 @@ release_version="${tag#v}"
 tmp_dir="$(mktemp -d 2>/dev/null || mktemp -d -t yanbao)"
 stage_launcher=""
 stage_app=""
-stage_runtime=""
 cleanup() {
   rm -rf "$tmp_dir"
   [ -z "$stage_launcher" ] || rm -f "$stage_launcher"
   [ -z "$stage_app" ] || rm -f "$stage_app"
-  [ -z "$stage_runtime" ] || rm -f "$stage_runtime"
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -85,23 +86,19 @@ fi
 expanded="$tmp_dir/expanded"
 mkdir -p "$expanded"
 tar -xzf "$tmp_dir/$asset" -C "$expanded"
-for required in yanbao yanbao-app yanxu-1.1.6; do
+for required in yanbao yanbao-app; do
   [ -f "$expanded/$required" ] || fail "发行包缺少 $required"
 done
-chmod 755 "$expanded/yanbao" "$expanded/yanbao-app" "$expanded/yanxu-1.1.6"
+chmod 755 "$expanded/yanbao" "$expanded/yanbao-app"
 
-version_output="$(YANXU_BIN="$expanded/yanxu-1.1.6" "$expanded/yanbao" --version 2>&1)" || fail "发行包不能运行：$version_output"
+version_output="$("$expanded/yanbao" --version 2>&1)" || fail "发行包不能使用本机言序运行：$version_output"
 printf '%s\n' "$version_output" | grep -Fqx "言包 $release_version" || fail "发行包版本不是言包 $release_version"
-printf '%s\n' "$version_output" | grep -Fqx "言序 1.1.6" || fail "发行包不是由言序 1.1.6 工具链提供服务"
 
 mkdir -p "$INSTALL_DIR"
 stage_launcher="$(mktemp "$INSTALL_DIR/.yanbao-launcher.XXXXXX")" || fail "不能创建安装临时文件"
 stage_app="$(mktemp "$INSTALL_DIR/.yanbao-app.XXXXXX")" || fail "不能创建安装临时文件"
-stage_runtime="$(mktemp "$INSTALL_DIR/.yanxu-runtime.XXXXXX")" || fail "不能创建安装临时文件"
 install -m 755 "$expanded/yanbao" "$stage_launcher"
 install -m 755 "$expanded/yanbao-app" "$stage_app"
-install -m 755 "$expanded/yanxu-1.1.6" "$stage_runtime"
-mv -f "$stage_runtime" "$INSTALL_DIR/yanxu-1.1.6"; stage_runtime=""
 mv -f "$stage_app" "$INSTALL_DIR/yanbao-app"; stage_app=""
 mv -f "$stage_launcher" "$INSTALL_DIR/yanbao"; stage_launcher=""
 

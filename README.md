@@ -3,13 +3,13 @@
 [![CI](https://github.com/YanXuLang/yanbao/actions/workflows/ci.yml/badge.svg)](https://github.com/YanXuLang/yanbao/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-c43b2f)](LICENSE)
 
-言包（`yanbao`）是言序的官方工程与包管理工具。自 0.2.0 起，命令层完全由言序语言编写；仓库不包含 Cargo 工程或 Rust 业务代码。安装正式 Release 时无需预先安装言序：发行包包含由言序源码编译的 standalone 和仅供工程子命令使用的专用言序运行时；只有从源码参与开发时才需要言序 1.1.6 或更高版本。
+言包（`yanbao`）是言序的官方工程与包管理工具。自 0.2.0 起，命令层完全由言序语言编写；仓库不包含 Cargo 工程或 Rust 业务代码。言包依赖本机安装的言序 1.1.6 或更高版本，正式 Release 只包含由言序源码编译的 standalone，不再捆绑另一份运行时。
 
 言包负责命令分派、项目工作流、事务回滚、诊断和用户输出；`言序.toml`、`言序.lock`、完整依赖图、模块导出和 YXB 构建全部通过言序的版本化 JSON 工程协议完成。因此，言包不会复制第二套 TOML、语义化版本或依赖选择实现。
 
 ## 安装
 
-正式发行包由上游`v1.1.6`同一稳定提交的言序 1.1.6 编译，包含当前平台的`yanbao`独立应用和专用言序 1.1.6 工程运行时；不会覆盖系统中已有的`yanxu`，也不把任何包管理业务改写为 Rust。
+请先安装言序 1.1.6 或更高版本，并确保`yanxu`在`PATH`中（也可设置`YANXU_BIN`）。安装器会在下载前检查本机言序；缺失或不兼容时立即终止。正式发行包只安装当前平台的`yanbao`独立应用，不会复制或覆盖言序运行时。
 
 macOS / Linux：
 
@@ -23,7 +23,7 @@ Windows PowerShell：
 irm https://raw.githubusercontent.com/YanXuLang/yanbao/main/scripts/install.ps1 | iex
 ```
 
-安装器按操作系统与 x86-64/ARM64 选择制品，强制验证独立 SHA-256 文件，再运行`yanbao --version`确认言包 0.2.1 与言序 1.1.6。可分别用`YANBAO_INSTALL_DIR`、`YANBAO_VERSION`和`YANBAO_GITHUB_TOKEN`覆盖安装目录、版本和 GitHub API 凭据。
+安装器按操作系统与 x86-64/ARM64 选择制品，强制验证独立 SHA-256 文件，再用本机言序运行`yanbao --version`确认兼容性。可分别用`YANXU_BIN`、`YANBAO_INSTALL_DIR`、`YANBAO_VERSION`和`YANBAO_GITHUB_TOKEN`覆盖言序路径、安装目录、版本和 GitHub API 凭据。
 
 ## 源码运行
 
@@ -36,7 +36,7 @@ YANXU_BIN=/自定义路径/yanxu ./yanbao doctor
 yanxu src/主.yx -- doctor
 ```
 
-不需要 Rust。仓库启动器执行源码；Release 启动器会自动识别同目录的已编译应用与专用运行时。
+不需要 Rust。仓库启动器执行源码；Release 启动器会自动识别同目录的已编译应用，两者都调用本机言序提供工程协议。
 
 ## 主要命令
 

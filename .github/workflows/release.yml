@@ -147,15 +147,14 @@ jobs:
           mkdir -p "$compile_source"
           cp src/*.yx "$compile_source/"
           "$YANXU_BIN" compile "$compile_source/主.yx" -o "$stage/yanbao-app" --release --standalone
-          install -m 755 "$YANXU_BIN" "$stage/yanxu-1.1.6"
           install -m 755 yanbao "$stage/yanbao"
           install -m 644 LICENSE README.md CHANGELOG.md "$stage/"
-          version_output="$(YANXU_BIN="$stage/yanxu-1.1.6" "$stage/yanbao" --version | tr -d '\r')"
+          version_output="$("$stage/yanbao" --version | tr -d '\r')"
           expected="$(printf '言包 %s\n言序 1.1.6' "$VERSION")"
           test "$version_output" = "$expected"
           project="$RUNNER_TEMP/yanbao-release-e2e"
-          YANXU_BIN="$stage/yanxu-1.1.6" "$stage/yanbao" init "$project" --name 发行验收 --force
-          YANXU_BIN="$stage/yanxu-1.1.6" "$stage/yanbao" doctor --manifest-path "$project"
+          "$stage/yanbao" init "$project" --name 发行验收 --force
+          "$stage/yanbao" doctor --manifest-path "$project"
           asset="yanbao-$TARGET.tar.gz"
           tar -C "$stage" -czf "dist/$asset" .
           if command -v sha256sum >/dev/null 2>&1; then
@@ -183,18 +182,12 @@ jobs:
           $App = Join-Path $Stage "yanbao-app.exe"
           & $env:YANXU_BIN compile (Join-Path $CompileSource "主.yx") -o $App --release --standalone
           if ($LASTEXITCODE -ne 0) { throw "言包独立应用编译失败" }
-          Copy-Item $env:YANXU_BIN (Join-Path $Stage "yanxu-1.1.6.exe")
           Copy-Item yanbao.cmd, yanbao.ps1, LICENSE, README.md, CHANGELOG.md $Stage
           $CmdPath = Join-Path $Stage "yanbao.cmd"
           $CmdText = [System.IO.File]::ReadAllText($CmdPath).Replace("`r`n", "`n").Replace("`n", "`r`n")
           [System.IO.File]::WriteAllText($CmdPath, $CmdText, [System.Text.UTF8Encoding]::new($false))
           $PreviousYanxu = $env:YANXU_BIN
           try {
-            $env:YANXU_BIN = Join-Path $Stage "yanxu-1.1.6.exe"
-            $RuntimeOutput = @(& $env:YANXU_BIN --version 2>&1)
-            $RuntimeExit = $LASTEXITCODE
-            Write-Host "捆绑运行时：$($RuntimeOutput -join ' ')"
-            if ($RuntimeExit -ne 0) { throw "捆绑言序运行时不能运行（退出码 $RuntimeExit）" }
             $DirectOutput = @(& $App --version 2>&1)
             $DirectExit = $LASTEXITCODE
             Write-Host "独立应用：$($DirectOutput -join ' ')"
@@ -341,6 +334,15 @@ jobs:
           YANBAO_VERSION: ${{ needs.validate.outputs.version }}
         run: |
           set -euo pipefail
+          curl --disable --fail --location --silent --show-error \
+            --proto '=https' --tlsv1.2 \
+            "https://raw.githubusercontent.com/YanXuLang/yanxu/v$YANXU_RELEASE_VERSION/scripts/install.sh" \
+            --output "$RUNNER_TEMP/install-yanxu.sh"
+          YANXU_GITHUB_TOKEN="$YANBAO_GITHUB_TOKEN" \
+            YANXU_INSTALL_DIR="$RUNNER_TEMP/yanxu/bin" \
+            YANXU_VERSION="$YANXU_RELEASE_VERSION" \
+            sh "$RUNNER_TEMP/install-yanxu.sh"
+          export YANXU_BIN="$RUNNER_TEMP/yanxu/bin/yanxu"
           sh scripts/install.sh
           version_output="$("$YANBAO_INSTALL_DIR/yanbao" --version | tr -d '\r')"
           expected="$(printf '言包 %s\n言序 1.1.6' "$YANBAO_VERSION")"
@@ -353,6 +355,13 @@ jobs:
           YANBAO_INSTALL_DIR: ${{ runner.temp }}\yanbao\bin
           YANBAO_VERSION: ${{ needs.validate.outputs.version }}
         run: |
+          $YanxuInstaller = Join-Path $env:RUNNER_TEMP "install-yanxu.ps1"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/YanXuLang/yanxu/v$env:YANXU_RELEASE_VERSION/scripts/install.ps1" -OutFile $YanxuInstaller
+          $env:YANXU_GITHUB_TOKEN = $env:YANBAO_GITHUB_TOKEN
+          $env:YANXU_INSTALL_DIR = Join-Path $env:RUNNER_TEMP "yanxu\bin"
+          $env:YANXU_VERSION = $env:YANXU_RELEASE_VERSION
+          & $YanxuInstaller
+          $env:YANXU_BIN = Join-Path $env:YANXU_INSTALL_DIR "yanxu.exe"
           & scripts/install.ps1
           $Output = @(& "$env:YANBAO_INSTALL_DIR\yanbao.cmd" --version 2>&1)
           if ($LASTEXITCODE -ne 0) { throw "安装后的言包不能运行" }
