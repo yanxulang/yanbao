@@ -44,12 +44,12 @@ jobs:
         with:
           repository: YanXuLang/yanxu
           path: yanxu-core
-          ref: ${{ (github.event_name == 'pull_request' || github.ref_name == 'codex/yanxu-1-1-7-gui') && 'codex/yanxu-1-1-7-gui' || 'main' }}
+          ref: main
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: YanXuLang/yanxu-gui
           path: yanxu-gui
-          ref: ${{ (github.event_name == 'pull_request' || github.ref_name == 'codex/yanxu-1-1-7-gui') && 'codex/yanxu-1-1-7-gui' || 'main' }}
+          ref: main
       - name: 安装 Linux GUI 开发库
         if: runner.os == 'Linux'
         run: |
