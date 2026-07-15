@@ -1,5 +1,14 @@
 # 变更记录
 
+## 0.4.0
+
+### GitHub 默认包源
+
+- `yanbao add <包名>` 默认解析到 `https://github.com/yanxulang/yanxu-<包名>.git`，无需维护中央包服务器。
+- `yanxu-` 包名前缀和 `yanxulang/` 组织名均可省略；也支持 `<组织>/<仓库>` 引用第三方 GitHub 包。
+- 本地依赖别名自动省略 `yanxu-`，同时保留 `--package` 覆盖以及显式 `--git`、`--path`、`--registry` 来源。
+- GitHub 简写解析具有独立规格测试，原有清单与锁文件事务回滚保持不变。
+
 ## 0.3.1
 
 ### Windows 兼容性

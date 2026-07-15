@@ -90,7 +90,7 @@ jobs:
           cp src/*.yx "$compile_source/"
           "$YANXU_BIN" compile "$compile_source/主.yx" -o "$app" --release --standalone
           version_output="$(YANXU_BIN="$YANXU_BIN" "$app" --version | tr -d '\r')"
-          expected="$(printf '言包 0.3.1\n言序 1.1.6')"
+          expected="$(printf '言包 0.4.0\n言序 1.1.6')"
           test "$version_output" = "$expected"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             cp "$app" yanbao-app.exe
