@@ -361,7 +361,21 @@ jobs:
           $env:YANXU_INSTALL_DIR = Join-Path $env:RUNNER_TEMP "yanxu\bin"
           & $YanxuInstaller
           $env:YANXU_BIN = Join-Path $env:YANXU_INSTALL_DIR "yanxu.exe"
-          & scripts/install.ps1
+          $originalModulePath = $env:PSModulePath
+          try {
+            $env:PSModulePath = @(
+              (Join-Path $env:ProgramFiles "WindowsPowerShell\Modules")
+              (Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\Modules")
+              $originalModulePath
+            ) -join ";"
+            $Installer = Start-Process -FilePath powershell.exe -ArgumentList @(
+              "-NoProfile", "-Command",
+              'Get-Content -Raw -Encoding ASCII scripts/install.ps1 | Invoke-Expression'
+            ) -NoNewWindow -Wait -PassThru
+          } finally {
+            $env:PSModulePath = $originalModulePath
+          }
+          if ($Installer.ExitCode -ne 0) { throw "Windows PowerShell 5.1 管道安装失败" }
           $Output = @(& "$env:YANBAO_INSTALL_DIR\yanbao.cmd" --version 2>&1)
           if ($LASTEXITCODE -ne 0) { throw "安装后的言包不能运行" }
           if ($Output -notcontains "言包 $env:YANBAO_VERSION") { throw "言包版本不一致" }

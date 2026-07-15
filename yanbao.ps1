@@ -2,13 +2,21 @@ $ErrorActionPreference = "Stop"
 $BundledApp = Join-Path $PSScriptRoot "yanbao-app.exe"
 $Yanxu = if ($env:YANXU_BIN) { $env:YANXU_BIN } else { "yanxu" }
 if (-not (Get-Command $Yanxu -ErrorAction SilentlyContinue)) {
-    Write-Error "言包需要言序 1.1.6 或更高版本；请先安装 yanxu，或通过 YANXU_BIN 指定其路径。"
+    Write-Error "Yanbao requires Yanxu 1.1.6 or newer. Install yanxu first or set YANXU_BIN."
     exit 1
 }
 $env:YANXU_BIN = $Yanxu
-if (Test-Path $BundledApp) {
-    & $BundledApp @args
-} else {
-    & $Yanxu (Join-Path $PSScriptRoot "src/主.yx") -- @args
+$OriginalOutputEncoding = [Console]::OutputEncoding
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+    if (Test-Path $BundledApp) {
+        & $BundledApp @args
+    } else {
+        $SourceName = [string]::Concat([char]0x4E3B, ".yx")
+        & $Yanxu (Join-Path (Join-Path $PSScriptRoot "src") $SourceName) -- @args
+    }
+    $ExitCode = $LASTEXITCODE
+} finally {
+    [Console]::OutputEncoding = $OriginalOutputEncoding
 }
-exit $LASTEXITCODE
+exit $ExitCode

@@ -54,16 +54,24 @@ jobs:
           $CmdText = [System.Text.Encoding]::UTF8.GetString(
             [System.IO.File]::ReadAllBytes((Resolve-Path "yanbao.cmd"))
           )
+          if ($CmdText -match '[^\x00-\x7F]') { throw "yanbao.cmd 必须只包含 ASCII 字符" }
           if (-not $CmdText.Contains("`r`n") -or $CmdText.Replace("`r`n", "").Contains("`n")) {
             throw "yanbao.cmd 必须只使用 CRLF 换行"
           }
           foreach ($Path in @("yanbao.ps1", "scripts/install.ps1")) {
+            $Bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $Path))
+            if ($Bytes | Where-Object { $_ -gt 127 }) { throw "$Path 必须只包含 ASCII 字符" }
             $Tokens = $null
             $Errors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile(
               (Resolve-Path $Path), [ref]$Tokens, [ref]$Errors
             )
             if ($Errors.Count -gt 0) { throw "$Path 语法错误：$($Errors -join '; ')" }
+            $WindowsPowerShell = Start-Process -FilePath powershell.exe -ArgumentList @(
+              "-NoProfile", "-Command",
+              "`$errors = `$null; [void][System.Management.Automation.Language.Parser]::ParseFile('$((Resolve-Path $Path).Path)', [ref]`$null, [ref]`$errors); if (`$errors.Count) { `$errors | Format-List; exit 1 }"
+            ) -NoNewWindow -Wait -PassThru
+            if ($WindowsPowerShell.ExitCode -ne 0) { throw "Windows PowerShell 5.1 无法解析 $Path" }
           }
       - name: 类型检查与规格测试
         shell: bash
@@ -84,6 +92,12 @@ jobs:
           version_output="$(YANXU_BIN="$YANXU_BIN" "$app" --version | tr -d '\r')"
           expected="$(printf '言包 0.3.0\n言序 1.1.6')"
           test "$version_output" = "$expected"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            cp "$app" yanbao-app.exe
+            launcher_output="$(YANXU_BIN="$YANXU_BIN" ./yanbao.cmd --version | tr -d '\r')"
+            rm -f yanbao-app.exe
+            test "$launcher_output" = "$expected"
+          fi
           standalone_project="$RUNNER_TEMP/yanbao-standalone-e2e"
           YANXU_BIN="$YANXU_BIN" "$app" init "$standalone_project" --name 独立应用验收 --force
           YANXU_BIN="$YANXU_BIN" "$app" doctor --manifest-path "$standalone_project"
