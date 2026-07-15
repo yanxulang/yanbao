@@ -9,37 +9,71 @@ permissions:
 
 jobs:
   test:
+    name: 言序 1.1.5 / ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           repository: YanXuLang/yanxu
           path: yanxu-core
-          ref: 746490ad6e6875fe82451a0f1ed1b0fc00cb8a26 # yanxu 1.1.5
-      - name: Build Yanxu runtime
+          ref: 746490ad6e6875fe82451a0f1ed1b0fc00cb8a26 # v1.1.5
+      - name: 编译言序 1.1.5 工具链
         run: cargo build --manifest-path yanxu-core/Cargo.toml --locked --bin yanxu
-      - name: Locate runtime
+      - name: 定位工具链
         shell: bash
         run: |
           suffix=""
           if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
           echo "YANXU_BIN=$GITHUB_WORKSPACE/yanxu-core/target/debug/yanxu$suffix" >> "$GITHUB_ENV"
-      - name: Enforce pure Yanxu implementation
+      - name: 检查纯言序实现与 Unix 脚本
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           test ! -e Cargo.toml
           test -z "$(find src -name '*.rs' -print -quit)"
-      - name: Type check and specifications
+          sh -n yanbao scripts/install.sh
+      - name: 检查纯言序实现与 Windows 脚本
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path Cargo.toml) { throw "言包不得包含 Cargo 工程" }
+          if (Get-ChildItem src -Filter *.rs -Recurse) { throw "言包源码必须完全使用言序" }
+          foreach ($Path in @("yanbao.ps1", "scripts/install.ps1")) {
+            $Tokens = $null
+            $Errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $Path), [ref]$Tokens, [ref]$Errors
+            )
+            if ($Errors.Count -gt 0) { throw "$Path 语法错误：$($Errors -join '; ')" }
+          }
+      - name: 类型检查与规格测试
         shell: bash
         run: |
           "$YANXU_BIN" check src/主.yx
           "$YANXU_BIN" test tests
-      - name: End-to-end project workflow
+      - name: 编译并验证独立应用
+        shell: bash
+        run: |
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
+          app="$RUNNER_TEMP/yanbao-app$suffix"
+          compile_source="$RUNNER_TEMP/yanbao-compile-source"
+          rm -rf "$compile_source"
+          mkdir -p "$compile_source"
+          cp src/*.yx "$compile_source/"
+          "$YANXU_BIN" compile "$compile_source/主.yx" -o "$app" --release --standalone
+          version_output="$(YANXU_BIN="$YANXU_BIN" "$app" --version | tr -d '\r')"
+          expected="$(printf '言包 0.2.0\n言序 1.1.5')"
+          test "$version_output" = "$expected"
+          standalone_project="$RUNNER_TEMP/yanbao-standalone-e2e"
+          YANXU_BIN="$YANXU_BIN" "$app" init "$standalone_project" --name 独立应用验收 --force
+          YANXU_BIN="$YANXU_BIN" "$app" doctor --manifest-path "$standalone_project"
+      - name: 端到端工程流程
         shell: bash
         run: |
           chmod +x ./yanbao

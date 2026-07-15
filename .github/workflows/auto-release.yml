@@ -1,0 +1,70 @@
+name: Auto Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - ".github/workflows/**"
+      - "言序.toml"
+      - "CHANGELOG.md"
+      - "README.md"
+      - "yanbao"
+      - "yanbao.cmd"
+      - "yanbao.ps1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: 准备版本标签
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      should_release: ${{ steps.release.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+      - name: 创建缺失的版本标签
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^版本 = "\([^"]*\)"$/\1/p' 言序.toml)"
+          test -n "$version"
+          grep -Fqx "## $version" CHANGELOG.md
+          tag="v$version"
+          should_release=false
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            git fetch origin "refs/tags/$tag:refs/tags/$tag"
+            if ! gh release view "$tag" >/dev/null 2>&1; then
+              should_release=true
+            fi
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$tag" -m "言包 $version"
+            git push origin "$tag"
+            should_release=true
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "should_release=$should_release" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: 构建并发布
+    needs: prepare
+    if: needs.prepare.outputs.should_release == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.prepare.outputs.tag }}
+    secrets: inherit
