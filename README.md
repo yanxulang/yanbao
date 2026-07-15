@@ -14,13 +14,13 @@
 macOS / Linux：
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/YanXuLang/yanbao/main/scripts/install.sh | sh
+curl -fsSL https://get.yanxu.dev/yanbao | sh
 ```
 
 Windows PowerShell：
 
 ```powershell
-irm https://raw.githubusercontent.com/YanXuLang/yanbao/main/scripts/install.ps1 | iex
+irm https://get.yanxu.dev/yanbao/windows | iex
 ```
 
 安装器按操作系统与 x86-64/ARM64 选择制品，强制验证独立 SHA-256 文件，再用本机言序运行`yanbao --version`确认兼容性。可分别用`YANXU_BIN`、`YANBAO_INSTALL_DIR`、`YANBAO_VERSION`和`YANBAO_GITHUB_TOKEN`覆盖言序路径、安装目录、版本和 GitHub API 凭据。
