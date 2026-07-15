@@ -1,5 +1,13 @@
 # 变更记录
 
+## 0.3.1
+
+### Windows 兼容性
+
+- 安装器和 PowerShell 启动器兼容系统自带的 Windows PowerShell 5.1，不再依赖 PowerShell 7 语法。
+- Windows CMD 启动器改为通过兼容层调用 PowerShell，并增加 ASCII、CRLF 与双 PowerShell 解析门禁。
+- Release 的 Windows 构建和安装冒烟使用修正后的启动链重新验证六平台制品。
+
 ## 0.3.0
 
 ### 运行时依赖
