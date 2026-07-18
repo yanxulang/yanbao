@@ -13,12 +13,110 @@ on:
 permissions:
   contents: read
 
-env:
-  YANXU_VERSION: 1.1.7
-
 jobs:
+  toolchain-versions:
+    name: 解析言序工具链版本
+    runs-on: ubuntu-24.04
+    outputs:
+      minimum_tag: ${{ steps.versions.outputs.minimum_tag }}
+      minimum_version: ${{ steps.versions.outputs.minimum_version }}
+      stable_tag: ${{ steps.versions.outputs.stable_tag }}
+      stable_version: ${{ steps.versions.outputs.stable_version }}
+      yanbao_version: ${{ steps.versions.outputs.yanbao_version }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - id: versions
+        name: 读取最低版本与当前稳定 Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          requirement="$(sed -n 's/^言序 = "\([^"]*\)"$/\1/p' 言序.toml)"
+          if [[ ! "$requirement" =~ ^\>\=([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "言序.toml 的最低版本必须使用 >=X.Y.Z" >&2
+            exit 1
+          fi
+          minimum_version="${BASH_REMATCH[1]}"
+          minimum_tag="v$minimum_version"
+          stable_tag="$(gh api repos/YanXuLang/yanxu/releases/latest --jq .tag_name)"
+          if [[ ! "$stable_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "言序最新正式 Release 标签无效：$stable_tag" >&2
+            exit 1
+          fi
+          stable_version="${BASH_REMATCH[1]}"
+          oldest="$(printf '%s\n%s\n' "$minimum_version" "$stable_version" | sort -V | head -n 1)"
+          if [[ "$oldest" != "$minimum_version" ]]; then
+            echo "当前稳定言序 $stable_version 低于最低要求 $minimum_version" >&2
+            exit 1
+          fi
+          yanbao_version="$(sed -n 's/^版本 = "\([^"]*\)"$/\1/p' 言序.toml)"
+          test -n "$yanbao_version"
+          {
+            echo "minimum_tag=$minimum_tag"
+            echo "minimum_version=$minimum_version"
+            echo "stable_tag=$stable_tag"
+            echo "stable_version=$stable_version"
+            echo "yanbao_version=$yanbao_version"
+          } >> "$GITHUB_OUTPUT"
+
+  toolchain-compatibility:
+    name: ${{ matrix.label }}
+    needs: toolchain-versions
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - channel: minimum
+            label: 最低兼容通道
+          - channel: stable
+            label: 当前稳定通道
+          - channel: development
+            label: 开发联调通道
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        if: matrix.channel != 'stable'
+        with:
+          repository: YanXuLang/yanxu
+          path: yanxu-core
+          ref: ${{ matrix.channel == 'minimum' && needs.toolchain-versions.outputs.minimum_tag || 'main' }}
+      - name: 编译通道工具链
+        if: matrix.channel != 'stable'
+        run: cargo build --manifest-path yanxu-core/Cargo.toml --locked --bin yanxu
+      - name: 定位通道工具链
+        if: matrix.channel != 'stable'
+        shell: bash
+        run: echo "YANXU_BIN=$GITHUB_WORKSPACE/yanxu-core/target/debug/yanxu" >> "$GITHUB_ENV"
+      - name: 安装当前稳定 Release
+        if: matrix.channel == 'stable'
+        shell: bash
+        env:
+          YANXU_VERSION: ${{ needs.toolchain-versions.outputs.stable_version }}
+          YANXU_INSTALL_DIR: ${{ runner.temp }}/yanxu/bin
+          YANXU_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --disable --fail --location --silent --show-error \
+            --proto '=https' --tlsv1.2 \
+            "https://raw.githubusercontent.com/YanXuLang/yanxu/${{ needs.toolchain-versions.outputs.stable_tag }}/scripts/install.sh" \
+            --output "$RUNNER_TEMP/install-yanxu.sh"
+          sh "$RUNNER_TEMP/install-yanxu.sh"
+          echo "YANXU_BIN=$YANXU_INSTALL_DIR/yanxu" >> "$GITHUB_ENV"
+      - name: 核对版本、能力与言包规格
+        shell: bash
+        env:
+          YANXU_EXPECTED_VERSION: ${{ matrix.channel == 'minimum' && needs.toolchain-versions.outputs.minimum_version || matrix.channel == 'stable' && needs.toolchain-versions.outputs.stable_version || '' }}
+        run: sh scripts/verify-toolchain.sh
+
   test:
-    name: 言序 1.1.7 / ${{ matrix.target }}
+    name: 当前稳定 ${{ needs.toolchain-versions.outputs.stable_version }} / ${{ matrix.target }}
+    needs: toolchain-versions
     strategy:
       fail-fast: false
       matrix:
@@ -36,40 +134,57 @@ jobs:
           - target: aarch64-pc-windows-msvc
             runner: windows-11-arm
     runs-on: ${{ matrix.runner }}
+    env:
+      YANXU_EXPECTED_VERSION: ${{ needs.toolchain-versions.outputs.stable_version }}
+      YANBAO_EXPECTED_VERSION: ${{ needs.toolchain-versions.outputs.yanbao_version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ inputs.ref || github.sha }}
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          repository: YanXuLang/yanxu
-          path: yanxu-core
-          ref: main
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-        with:
           repository: YanXuLang/yanxu-gui
           path: yanxu-gui
           ref: main
+      - name: 安装当前稳定言序（Unix）
+        if: runner.os != 'Windows'
+        shell: bash
+        env:
+          YANXU_VERSION: ${{ needs.toolchain-versions.outputs.stable_version }}
+          YANXU_INSTALL_DIR: ${{ runner.temp }}/yanxu/bin
+          YANXU_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          curl --disable --fail --location --silent --show-error \
+            --proto '=https' --tlsv1.2 \
+            "https://raw.githubusercontent.com/YanXuLang/yanxu/${{ needs.toolchain-versions.outputs.stable_tag }}/scripts/install.sh" \
+            --output "$RUNNER_TEMP/install-yanxu.sh"
+          sh "$RUNNER_TEMP/install-yanxu.sh"
+          echo "YANXU_BIN=$YANXU_INSTALL_DIR/yanxu" >> "$GITHUB_ENV"
+      - name: 安装当前稳定言序（Windows）
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          YANXU_VERSION: ${{ needs.toolchain-versions.outputs.stable_version }}
+          YANXU_INSTALL_DIR: ${{ runner.temp }}\yanxu\bin
+          YANXU_GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $Script = Join-Path $env:RUNNER_TEMP "install-yanxu.ps1"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/YanXuLang/yanxu/${{ needs.toolchain-versions.outputs.stable_tag }}/scripts/install.ps1" -OutFile $Script
+          & $Script
+          "YANXU_BIN=$env:YANXU_INSTALL_DIR\yanxu.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
       - name: 安装 Linux GUI 开发库
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev
-      - name: 编译言序 1.1.7 工具链
-        run: cargo build --manifest-path yanxu-core/Cargo.toml --locked --bin yanxu
-      - name: 定位工具链
-        shell: bash
-        run: |
-          suffix=""
-          if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
-          echo "YANXU_BIN=$GITHUB_WORKSPACE/yanxu-core/target/debug/yanxu$suffix" >> "$GITHUB_ENV"
       - name: 检查纯言序实现与 Unix 脚本
         if: runner.os != 'Windows'
         shell: bash
         run: |
           test ! -e Cargo.toml
           test -z "$(find src -name '*.rs' -print -quit)"
-          sh -n yanbao scripts/install.sh
+          sh -n yanbao scripts/install.sh scripts/verify-toolchain.sh
       - name: 检查纯言序实现与 Windows 脚本
         if: runner.os == 'Windows'
         shell: pwsh
@@ -98,12 +213,9 @@ jobs:
             ) -NoNewWindow -Wait -PassThru
             if ($WindowsPowerShell.ExitCode -ne 0) { throw "Windows PowerShell 5.1 无法解析 $Path" }
           }
-      - name: 类型检查与规格测试
+      - name: 核对版本、能力与言包规格
         shell: bash
-        run: |
-          test "$("$YANXU_BIN" --version | tr -d '\r')" = "言序 $YANXU_VERSION"
-          "$YANXU_BIN" check src/主.yx
-          "$YANXU_BIN" test tests
+        run: sh scripts/verify-toolchain.sh
       - name: 编译并验证独立应用
         shell: bash
         run: |
@@ -116,7 +228,7 @@ jobs:
           cp src/*.yx "$compile_source/"
           "$YANXU_BIN" compile "$compile_source/主.yx" -o "$app" --release --standalone
           version_output="$(YANXU_BIN="$YANXU_BIN" "$app" --version | tr -d '\r')"
-          expected="$(printf '言包 0.5.0\n言序 1.1.7')"
+          expected="$(printf '言包 %s\n言序 %s' "$YANBAO_EXPECTED_VERSION" "$YANXU_EXPECTED_VERSION")"
           test "$version_output" = "$expected"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             cp "$app" yanbao-app.exe
