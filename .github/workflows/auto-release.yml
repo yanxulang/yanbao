@@ -51,7 +51,17 @@ jobs:
               echo "版本 $version 已由另一提交使用；禁止移动既有标签" >&2
               exit 1
             }
-            if ! gh release view "$tag" >/dev/null 2>&1; then should_release=true; fi
+            if release_state="$(gh release view "$tag" \
+              --json isDraft,isPrerelease \
+              --jq '"\(.isDraft) \(.isPrerelease)"' 2>/dev/null)"; then
+              if [[ "$release_state" == "false false" ]]; then
+                should_release=false
+              else
+                should_release=true
+              fi
+            else
+              should_release=true
+            fi
           else
             git tag -a "$tag" -m "言包 $version"
             git push origin "$tag"
