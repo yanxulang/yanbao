@@ -74,7 +74,7 @@ jobs:
             echo "stable_version=$stable_version"
             echo "yanbao_version=$yanbao_version"
           } >> "$GITHUB_OUTPUT"
-      - name: 检查许可与可复现 SBOM
+      - name: 检查许可与发布脚本
         shell: bash
         run: |
           set -euo pipefail
@@ -85,37 +85,6 @@ jobs:
           grep -Fqx "MIT License" LICENSE
           sh -n yanbao scripts/install.sh scripts/verify-toolchain.sh \
             scripts/generate-sbom.sh scripts/generate-build-metadata.sh
-          first="$RUNNER_TEMP/yanbao-sbom-first/yanbao.cdx.json"
-          second="$RUNNER_TEMP/yanbao-sbom-second/yanbao.cdx.json"
-          sh scripts/generate-sbom.sh "$first"
-          sh scripts/generate-sbom.sh "$second"
-          cmp "$first" "$second"
-          version="$(sed -n 's/^版本 = "\([^"]*\)"$/\1/p' 言序.toml)"
-          minimum="$(sed -n 's/^言序 = ">=\([^"]*\)"$/\1/p' 言序.toml)"
-          manifest_sha="$(sha256sum 言序.toml | awk '{print $1}')"
-          lock_sha="$(sha256sum 言序.lock | awk '{print $1}')"
-          jq -e \
-            --arg version "$version" \
-            --arg minimum "$minimum" \
-            --arg commit "$GITHUB_SHA" \
-            --arg manifest_sha "$manifest_sha" \
-            --arg lock_sha "$lock_sha" \
-            '.bomFormat == "CycloneDX" and .specVersion == "1.5"
-             and (.serialNumber | test("^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
-             and .metadata.component.version == $version
-             and ([.metadata.component.properties[] |
-               select(.name == "cdx:yanbao:source:commit" and .value == $commit)] | length) == 1
-             and ([.metadata.component.properties[] |
-               select(.name == "cdx:yanbao:manifest:sha256" and .value == $manifest_sha)] | length) == 1
-             and ([.metadata.component.properties[] |
-               select(.name == "cdx:yanbao:lock:sha256" and .value == $lock_sha)] | length) == 1
-             and ([.components[] |
-               select(.name == "yanxu" and .version == $minimum and .scope == "required")] | length) == 1' \
-            "$first" >/dev/null
-          if grep -F "$GITHUB_WORKSPACE" "$first" >/dev/null; then
-            echo "SBOM 不得包含构建机绝对路径" >&2
-            exit 1
-          fi
 
   toolchain-compatibility:
     name: ${{ matrix.label }}
@@ -168,6 +137,47 @@ jobs:
         env:
           YANXU_EXPECTED_VERSION: ${{ matrix.channel == 'minimum' && needs.toolchain-versions.outputs.minimum_version || matrix.channel == 'stable' && needs.toolchain-versions.outputs.stable_version || '' }}
         run: sh scripts/verify-toolchain.sh
+      - name: 使用最低工具链验证可复现 SBOM
+        if: matrix.channel == 'minimum'
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$YANXU_BIN" package protocol \
+            '{"protocol_version":1,"operation":"resolve","path":".","offline":true}' \
+            > "$RUNNER_TEMP/yanbao-resolve.json"
+          jq -e '.ok == true and .result.target == "x86_64-unknown-linux-gnu"' \
+            "$RUNNER_TEMP/yanbao-resolve.json" >/dev/null
+          first="$RUNNER_TEMP/yanbao-sbom-first/yanbao.cdx.json"
+          second="$RUNNER_TEMP/yanbao-sbom-second/yanbao.cdx.json"
+          sh scripts/generate-sbom.sh "$first"
+          sh scripts/generate-sbom.sh "$second"
+          cmp "$first" "$second"
+          version="$(sed -n 's/^版本 = "\([^"]*\)"$/\1/p' 言序.toml)"
+          minimum="$(sed -n 's/^言序 = ">=\([^"]*\)"$/\1/p' 言序.toml)"
+          manifest_sha="$(sha256sum 言序.toml | awk '{print $1}')"
+          lock_sha="$(sha256sum 言序.lock | awk '{print $1}')"
+          jq -e \
+            --arg version "$version" \
+            --arg minimum "$minimum" \
+            --arg commit "$GITHUB_SHA" \
+            --arg manifest_sha "$manifest_sha" \
+            --arg lock_sha "$lock_sha" \
+            '.bomFormat == "CycloneDX" and .specVersion == "1.5"
+             and (.serialNumber | test("^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
+             and .metadata.component.version == $version
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:source:commit" and .value == $commit)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:manifest:sha256" and .value == $manifest_sha)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:lock:sha256" and .value == $lock_sha)] | length) == 1
+             and ([.components[] |
+               select(.name == "yanxu" and .version == $minimum and .scope == "required")] | length) == 1' \
+            "$first" >/dev/null
+          if grep -F "$GITHUB_WORKSPACE" "$first" >/dev/null; then
+            echo "SBOM 不得包含构建机绝对路径" >&2
+            exit 1
+          fi
 
   test:
     name: 当前稳定言序 / ${{ matrix.target }}
@@ -297,6 +307,13 @@ jobs:
       - name: 编译并验证独立应用
         shell: bash
         run: |
+          set -euo pipefail
+          "$YANXU_BIN" package protocol \
+            '{"protocol_version":1,"operation":"resolve","path":".","offline":true}' \
+            > "$RUNNER_TEMP/yanbao-resolve.json"
+          jq -e --arg target "${{ matrix.target }}" \
+            '.ok == true and .result.target == $target' \
+            "$RUNNER_TEMP/yanbao-resolve.json" >/dev/null
           suffix=""
           if [[ "$RUNNER_OS" == "Windows" ]]; then suffix=".exe"; fi
           app="$RUNNER_TEMP/yanbao-app$suffix"
