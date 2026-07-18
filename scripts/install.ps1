@@ -47,9 +47,26 @@ $Version = if ($env:YANBAO_VERSION) { $env:YANBAO_VERSION } else { "latest" }
 $InstallDir = if ($env:YANBAO_INSTALL_DIR) { $env:YANBAO_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "Programs\Yanbao\bin" }
 $Yanxu = if ($env:YANXU_BIN) { $env:YANXU_BIN } else { "yanxu" }
 if (-not (Get-Command $Yanxu -ErrorAction SilentlyContinue)) {
-    throw "Yanbao installation failed: Yanxu 1.1.7 or newer is required; install yanxu or set YANXU_BIN"
+    throw "Yanbao installation failed: Yanxu 1.1.17 or newer is required; install yanxu or set YANXU_BIN"
 }
 $env:YANXU_BIN = $Yanxu
+$ToolchainProbe = Invoke-Utf8Process $Yanxu "version --json"
+if ($ToolchainProbe.ExitCode -ne 0) {
+    throw "Yanbao installation failed: could not read the installed Yanxu version: $($ToolchainProbe.Text)"
+}
+try {
+    $ReportedYanxuVersion = [string](($ToolchainProbe.Text | ConvertFrom-Json).version)
+    $YanxuWithoutBuild = ($ReportedYanxuVersion -split "\+", 2)[0]
+    $YanxuCoreText = ($YanxuWithoutBuild -split "-", 2)[0]
+    $YanxuCoreVersion = [version]$YanxuCoreText
+} catch {
+    throw "Yanbao installation failed: invalid installed Yanxu version report"
+}
+$MinimumYanxuVersion = [version]"1.1.17"
+$MinimumPrerelease = $YanxuCoreVersion -eq $MinimumYanxuVersion -and $YanxuWithoutBuild.Contains("-")
+if ($YanxuCoreVersion -lt $MinimumYanxuVersion -or $MinimumPrerelease) {
+    throw "Yanbao installation failed: Yanxu 1.1.17 or newer is required; found $ReportedYanxuVersion"
+}
 try {
     $InstallDir = [System.IO.Path]::GetFullPath($InstallDir)
 } catch {

@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 $BundledApp = Join-Path $PSScriptRoot "yanbao-app.exe"
 $Yanxu = if ($env:YANXU_BIN) { $env:YANXU_BIN } else { "yanxu" }
 if (-not (Get-Command $Yanxu -ErrorAction SilentlyContinue)) {
-    Write-Error "Yanbao requires Yanxu 1.1.7 or newer. Install yanxu first or set YANXU_BIN."
+    Write-Error "Yanbao requires Yanxu 1.1.17 or newer. Install yanxu first or set YANXU_BIN."
     exit 1
 }
 $env:YANXU_BIN = $Yanxu
