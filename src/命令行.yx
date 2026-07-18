@@ -60,8 +60,8 @@
 终
 
 公 法 旗标列（命令：文）：列<文> 则
-    若 命令 等于「new」则 归【「--help」，「-h」，「--gui」，「--图形」，「--force」，「--offline」】；终
-    若 命令 等于「add」或 命令 等于「remove」则 归【「--help」，「-h」，「--dev」，「--no-lock」，「--offline」】；终
+    若 命令 等于「new」则 归【「--help」，「-h」，「--gui」，「--图形」，「--force」，「--offline」，「--recover」，「--恢复」】；终
+    若 命令 等于「add」或 命令 等于「remove」则 归【「--help」，「-h」，「--dev」，「--no-lock」，「--offline」，「--recover」，「--恢复」】；终
     若 命令 等于「install」则 归【「--help」，「-h」，「--offline」，「--workspace」】；终
     若 命令 等于「update」则 归【「--help」，「-h」，「--offline」，「--workspace」，「--dry-run」】；终
     若 命令 等于「outdated」或 命令 等于「tree」或 命令 等于「why」则 归【「--help」，「-h」，「--offline」】；终
@@ -104,6 +104,9 @@
     终
     若 含项（已见，「--message-format」）且 含项（已见，「--消息格式」）则
         参数错误（「CLI004」，「--message-format 与 --消息格式是同一选项，不能同时使用」，命令）；
+    终
+    若 含项（已见，「--recover」）且 含项（已见，「--恢复」）则
+        参数错误（「CLI004」，「--recover 与 --恢复是同一选项，不能同时使用」，命令）；
     终
     若 命令 等于「add」则
         令 来源数 为 0；

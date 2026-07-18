@@ -305,6 +305,105 @@ jobs:
           standalone_project="$RUNNER_TEMP/yanbao-standalone-e2e"
           YANXU_BIN="$YANXU_BIN" "$app" init "$standalone_project" --name 独立应用验收 --force
           YANXU_BIN="$YANXU_BIN" "$app" doctor --manifest-path "$standalone_project"
+
+          transaction_root="$RUNNER_TEMP/yanbao-transaction-e2e"
+          transaction_dependency="$transaction_root/dependency"
+          transaction_project="$transaction_root/project"
+          rm -rf "$transaction_root"
+          mkdir -p "$transaction_root"
+          YANXU_BIN="$YANXU_BIN" "$app" new "$transaction_dependency" --name transaction_dep
+          YANXU_BIN="$YANXU_BIN" "$app" new "$transaction_project" --name transaction_root
+          cp "$transaction_project/言序.toml" "$transaction_root/manifest.original"
+          cp "$transaction_project/言序.lock" "$transaction_root/lock.original"
+
+          set +e
+          YANXU_BIN="$YANXU_BIN" YANBAO_FAULT_INJECTION=dependency_after_resolve \
+            "$app" add transaction_dep --path "$transaction_dependency" \
+            --manifest-path "$transaction_project" --offline --message-format json \
+            > "$transaction_root/dependency-failure.json" 2> "$transaction_root/dependency-failure.log"
+          dependency_failure_status=$?
+          set -e
+          test "$dependency_failure_status" -eq 1
+          jq -e 'any(.diagnostics[]; .code == "TXN900")' "$transaction_root/dependency-failure.json" >/dev/null
+          cmp "$transaction_project/言序.toml" "$transaction_root/manifest.original"
+          cmp "$transaction_project/言序.lock" "$transaction_root/lock.original"
+          test ! -e "$transaction_project/.yanxu/yanbao-transaction"
+
+          set +e
+          YANXU_BIN="$YANXU_BIN" YANBAO_FAULT_INJECTION=dependency_after_resolve_interrupt \
+            "$app" add transaction_dep --path "$transaction_dependency" \
+            --manifest-path "$transaction_project" --offline --message-format json \
+            > "$transaction_root/dependency-interrupt.json" 2> "$transaction_root/dependency-interrupt.log"
+          dependency_interrupt_status=$?
+          set -e
+          test "$dependency_interrupt_status" -eq 1
+          test -f "$transaction_project/.yanxu/yanbao-transaction/journal.json"
+          cp "$transaction_project/言序.toml" "$transaction_root/manifest.transaction"
+          printf '%s\n' 'concurrent manifest replacement' > "$transaction_project/言序.toml"
+          set +e
+          YANXU_BIN="$YANXU_BIN" "$app" add transaction_dep --path "$transaction_dependency" \
+            --manifest-path "$transaction_project" --offline --recover --message-format json \
+            > "$transaction_root/concurrent-rejected.json" 2> "$transaction_root/concurrent-rejected.log"
+          concurrent_status=$?
+          set -e
+          test "$concurrent_status" -eq 1
+          jq -e 'any(.diagnostics[]; .code == "TXN005")' "$transaction_root/concurrent-rejected.json" >/dev/null
+          test -f "$transaction_project/.yanxu/yanbao-transaction/journal.json"
+          cp "$transaction_root/manifest.transaction" "$transaction_project/言序.toml"
+          set +e
+          YANXU_BIN="$YANXU_BIN" "$app" doctor --manifest-path "$transaction_project" --message-format json \
+            > "$transaction_root/blocked.json" 2> "$transaction_root/blocked.log"
+          blocked_status=$?
+          set -e
+          test "$blocked_status" -eq 1
+          jq -e 'any(.diagnostics[]; .code == "TXN001")' "$transaction_root/blocked.json" >/dev/null
+          YANXU_BIN="$YANXU_BIN" "$app" add transaction_dep --path "$transaction_dependency" \
+            --manifest-path "$transaction_project" --offline --recover --message-format json \
+            > "$transaction_root/dependency-recovered.json"
+          jq -e '
+            .success == true and
+            (.changes | map(.kind) | index("transaction_recovered")) != null and
+            (.changes | map(.kind) | index("dependency_added")) != null
+          ' "$transaction_root/dependency-recovered.json" >/dev/null
+          test ! -e "$transaction_project/.yanxu/yanbao-transaction"
+
+          cp "$transaction_project/言序.toml" "$transaction_root/manifest.with-dependency"
+          cp "$transaction_project/言序.lock" "$transaction_root/lock.with-dependency"
+          set +e
+          YANXU_BIN="$YANXU_BIN" YANBAO_FAULT_INJECTION=new_first_file \
+            "$app" new "$transaction_project" --name replacement --force --message-format json \
+            > "$transaction_root/new-failure.json" 2> "$transaction_root/new-failure.log"
+          new_failure_status=$?
+          set -e
+          test "$new_failure_status" -eq 1
+          cmp "$transaction_project/言序.toml" "$transaction_root/manifest.with-dependency"
+          cmp "$transaction_project/言序.lock" "$transaction_root/lock.with-dependency"
+          test ! -e "$transaction_project/.yanxu/yanbao-transaction"
+          test -z "$(find "$transaction_root" -maxdepth 1 -name '.yanbao-*' -print -quit)"
+
+          set +e
+          YANXU_BIN="$YANXU_BIN" YANBAO_FAULT_INJECTION=new_first_file_interrupt \
+            "$app" new "$transaction_project" --name replacement --force --message-format json \
+            > "$transaction_root/new-interrupt.json" 2> "$transaction_root/new-interrupt.log"
+          new_interrupt_status=$?
+          set -e
+          test "$new_interrupt_status" -eq 1
+          set +e
+          YANXU_BIN="$YANXU_BIN" "$app" doctor --manifest-path "$transaction_project" --message-format json \
+            > "$transaction_root/new-blocked.json" 2> "$transaction_root/new-blocked.log"
+          new_blocked_status=$?
+          set -e
+          test "$new_blocked_status" -eq 1
+          jq -e 'any(.diagnostics[]; .code == "TXN001")' "$transaction_root/new-blocked.json" >/dev/null
+          YANXU_BIN="$YANXU_BIN" "$app" new "$transaction_project" --name replacement \
+            --force --recover --message-format json > "$transaction_root/new-recovered.json"
+          jq -e '
+            .success == true and
+            (.changes | map(.kind) | index("transaction_recovered")) != null and
+            (.changes | map(.kind) | index("project_created")) != null
+          ' "$transaction_root/new-recovered.json" >/dev/null
+          test ! -e "$transaction_project/.yanxu/yanbao-transaction"
+          test -z "$(find "$transaction_root" -maxdepth 1 -name '.yanbao-*' -print -quit)"
       - name: 端到端工程流程
         shell: bash
         run: |

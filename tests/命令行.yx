@@ -36,6 +36,7 @@
 测试.相等（命令行.解析（「新」，【「项目」，「--图形」】）【「arguments」】【1】，「--图形」）；
 测试.相等（命令行.解析（「version」，【「--timeout」，「5000」】）【「arguments」】【1】，「5000」）；
 测试.相等（命令行.解析（「help」，【「build」，「--message-format」，「json」】）【「arguments」】【2】，「json」）；
+测试.断言（命令行.解析（「add」，【「包」，「--recover」】）【「arguments」】【1】等于「--recover」，「依赖编辑应支持恢复旗标」）；
 
 逐 命令 于【「new」，「install」，「update」，「check」，「test」，「run」，「build」，「bundle」，「clean」，「tree」，「doctor」，「doc」，「outdated」，「pack」，「vendor」，「audit」，「version」，「help」】则
     测试.相等（命令行.解析（命令，【「--message-format」，「json」】）【「arguments」】【1】，「json」）；
@@ -56,4 +57,5 @@
 应失败（「clean」，【「--」，「--once」】，「CLI008」）；
 应失败（「check」，【「--timeout」，「1000」，「--超时」，「2000」】，「CLI004」）；
 应失败（「check」，【「--message-format」，「json」，「--消息格式」，「human」】，「CLI004」）；
+应失败（「new」，【「--recover」，「--恢复」】，「CLI004」）；
 应失败（「不存在的命令」，【】，「CLI001」）；
