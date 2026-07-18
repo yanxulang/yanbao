@@ -23,8 +23,31 @@ need curl
 need tar
 need install
 YANXU_BIN="${YANXU_BIN:-yanxu}"
-command -v "$YANXU_BIN" >/dev/null 2>&1 || fail "需要先安装言序 1.1.7 或更高版本（yanxu），也可通过 YANXU_BIN 指定其路径"
+command -v "$YANXU_BIN" >/dev/null 2>&1 || fail "需要先安装言序 1.1.17 或更高版本（yanxu），也可通过 YANXU_BIN 指定其路径"
 export YANXU_BIN
+yanxu_version_json="$("$YANXU_BIN" version --json 2>/dev/null)" || fail "无法读取本机言序版本"
+yanxu_version="$(printf '%s\n' "$yanxu_version_json" | sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)"
+[ -n "$yanxu_version" ] || fail "本机言序版本报告无效"
+yanxu_without_build="${yanxu_version%%+*}"
+yanxu_core="${yanxu_without_build%%-*}"
+old_ifs="$IFS"
+IFS=.
+set -- $yanxu_core
+IFS="$old_ifs"
+[ "$#" -eq 3 ] || fail "本机言序版本报告无效：$yanxu_version"
+yanxu_major="$1"; yanxu_minor="$2"; yanxu_patch="$3"
+case "$yanxu_major.$yanxu_minor.$yanxu_patch" in
+  *[!0-9.]*) fail "本机言序版本报告无效：$yanxu_version" ;;
+esac
+yanxu_compatible=false
+if [ "$yanxu_major" -gt 1 ] ||
+   { [ "$yanxu_major" -eq 1 ] && [ "$yanxu_minor" -gt 1 ]; } ||
+   { [ "$yanxu_major" -eq 1 ] && [ "$yanxu_minor" -eq 1 ] && [ "$yanxu_patch" -gt 17 ]; } ||
+   { [ "$yanxu_major" -eq 1 ] && [ "$yanxu_minor" -eq 1 ] && [ "$yanxu_patch" -eq 17 ] && [ "${yanxu_without_build#*-}" = "$yanxu_without_build" ]; }
+then
+  yanxu_compatible=true
+fi
+[ "$yanxu_compatible" = true ] || fail "需要言序 1.1.17 或更高版本，当前为 $yanxu_version"
 
 case "$(uname -s)" in
   Darwin) system="apple-darwin" ;;

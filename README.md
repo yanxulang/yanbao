@@ -3,13 +3,13 @@
 [![CI](https://github.com/YanXuLang/yanbao/actions/workflows/ci.yml/badge.svg)](https://github.com/YanXuLang/yanbao/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-MIT-c43b2f)](LICENSE)
 
-言包（`yanbao`）是言序的官方工程与包管理工具。自 0.2.0 起，命令层完全由言序语言编写；仓库不包含 Cargo 工程或 Rust 业务代码。言包依赖本机安装的言序 1.1.7 或更高版本，正式 Release 只包含由言序源码编译的 standalone，不再捆绑另一份运行时。
+言包（`yanbao`）是言序的官方工程与包管理工具。自 0.2.0 起，命令层完全由言序语言编写；仓库不包含 Cargo 工程或 Rust 业务代码。言包依赖本机安装的言序 1.1.17 或更高版本，正式 Release 只包含由言序源码编译的 standalone，不再捆绑另一份运行时。
 
 言包负责命令分派、项目工作流、事务回滚、诊断和用户输出；`言序.toml`、`言序.lock`、完整依赖图、模块导出和 YXB 构建全部通过言序的版本化 JSON 工程协议完成。因此，言包不会复制第二套 TOML、语义化版本或依赖选择实现。
 
 ## 安装
 
-请先安装言序 1.1.7 或更高版本，并确保`yanxu`在`PATH`中（也可设置`YANXU_BIN`）。安装器会在下载前检查本机言序；缺失或不兼容时立即终止。正式发行包只安装当前平台的`yanbao`独立应用，不会复制或覆盖言序运行时。
+请先安装言序 1.1.17 或更高版本，并确保`yanxu`在`PATH`中（也可设置`YANXU_BIN`）。安装器会在下载前检查本机言序；缺失或不兼容时立即终止。正式发行包只安装当前平台的`yanbao`独立应用，不会复制或覆盖言序运行时。
 
 macOS / Linux：
 
@@ -27,7 +27,7 @@ irm https://get.yanxu.dev/yanbao/windows | iex
 
 ## 源码运行
 
-参与开发时先安装言序 1.1.7 或更高版本，再克隆本仓库。Unix 使用`yanbao`，Windows 使用`yanbao.cmd`或`yanbao.ps1`：
+参与开发时先安装言序 1.1.17 或更高版本，再克隆本仓库。Unix 使用`yanbao`，Windows 使用`yanbao.cmd`或`yanbao.ps1`：
 
 ```sh
 ./yanbao --help
