@@ -685,9 +685,101 @@ jobs:
             --json isDraft,isPrerelease,assets \
             --jq '.isDraft == false and .isPrerelease == true and (.assets | length) == 27')" = "true"
 
+  verify-published-assets:
+    name: 先验验证公开预发布制品
+    if: ${{ !inputs.build_only }}
+    needs: [validate, publicize]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - name: 下载并先验验证精确发行主体
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          COMMIT_SHA: ${{ needs.validate.outputs.commit }}
+          ATTESTATION_REF: ${{ needs.validate.outputs.attestation_ref }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          dist="$RUNNER_TEMP/yanbao-published-assets"
+          mkdir -p "$dist"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$dist"
+
+          targets=(
+            x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+            x86_64-apple-darwin aarch64-apple-darwin
+            x86_64-pc-windows-msvc aarch64-pc-windows-msvc
+          )
+          expected_assets=(
+            "yanbao-$VERSION.cdx.json"
+            "yanbao-$VERSION.provenance.jsonl"
+            "yanbao-$VERSION.sbom-attestation.jsonl"
+          )
+          subjects=("yanbao-$VERSION.cdx.json")
+          archives=()
+          for target in "${targets[@]}"; do
+            case "$target" in
+              *windows*) archive="yanbao-$target.zip" ;;
+              *) archive="yanbao-$target.tar.gz" ;;
+            esac
+            archives+=("$archive")
+            expected_assets+=(
+              "$archive"
+              "yanbao-$target.sha256"
+              "yanbao-$target.build.json"
+              "yanbao-$target.lock"
+            )
+            subjects+=(
+              "$archive"
+              "yanbao-$target.sha256"
+              "yanbao-$target.build.json"
+              "yanbao-$target.lock"
+            )
+          done
+          test "${#expected_assets[@]}" -eq 27
+          test "${#subjects[@]}" -eq 25
+          test "${#archives[@]}" -eq 6
+          expected_names="$(printf '%s\n' "${expected_assets[@]}" | LC_ALL=C sort)"
+          actual_names="$(find "$dist" -mindepth 1 -maxdepth 1 -type f \
+            -exec basename {} \; | LC_ALL=C sort)"
+          test "$actual_names" = "$expected_names"
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,assets \
+            --jq '.isDraft == false and .isPrerelease == true and (.assets | length) == 27')" = "true"
+
+          provenance="$dist/yanbao-$VERSION.provenance.jsonl"
+          sbom_attestation="$dist/yanbao-$VERSION.sbom-attestation.jsonl"
+          test -s "$provenance"
+          test -s "$sbom_attestation"
+          for subject in "${subjects[@]}"; do
+            gh attestation verify "$dist/$subject" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --bundle "$provenance" \
+              --source-digest "$COMMIT_SHA" \
+              --source-ref "$ATTESTATION_REF" >/dev/null
+          done
+          for archive in "${archives[@]}"; do
+            gh attestation verify "$dist/$archive" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --bundle "$sbom_attestation" \
+              --predicate-type "https://cyclonedx.org/bom" \
+              --source-digest "$COMMIT_SHA" \
+              --source-ref "$ATTESTATION_REF" >/dev/null
+          done
+      - name: 保存已验签发行快照
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: yanbao-published-assets
+          path: ${{ runner.temp }}/yanbao-published-assets/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
   smoke:
     name: 安装冒烟 / ${{ matrix.os }}
-    needs: [validate, publicize]
+    needs: [validate, verify-published-assets]
     strategy:
       fail-fast: false
       matrix:
@@ -699,11 +791,22 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: yanbao-published-assets
+          path: ${{ runner.temp }}/yanbao-published-assets
+      - name: 核对已验签发行快照
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find "$RUNNER_TEMP/yanbao-published-assets" \
+            -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 27
       - name: 使用本机言序安装并验证（Unix）
         if: runner.os != 'Windows'
         shell: bash
         env:
-          YANBAO_GITHUB_TOKEN: ${{ github.token }}
+          YANBAO_ASSET_DIR: ${{ runner.temp }}/yanbao-published-assets
           YANBAO_INSTALL_DIR: ${{ runner.temp }}/yanbao/bin
           YANBAO_VERSION: ${{ needs.validate.outputs.version }}
         run: |
@@ -712,10 +815,13 @@ jobs:
             --proto '=https' --tlsv1.2 \
             "https://raw.githubusercontent.com/YanXuLang/yanxu/v$YANXU_VERSION/scripts/install.sh" \
             --output "$RUNNER_TEMP/install-yanxu.sh"
-          YANXU_GITHUB_TOKEN="$YANBAO_GITHUB_TOKEN" \
-            YANXU_INSTALL_DIR="$RUNNER_TEMP/yanxu/bin" \
+          YANXU_INSTALL_DIR="$RUNNER_TEMP/yanxu/bin" \
             sh "$RUNNER_TEMP/install-yanxu.sh"
           export YANXU_BIN="$RUNNER_TEMP/yanxu/bin/yanxu"
+          unset GH_TOKEN GITHUB_TOKEN YANBAO_GITHUB_TOKEN YANXU_GITHUB_TOKEN
+          for token_name in GH_TOKEN GITHUB_TOKEN YANBAO_GITHUB_TOKEN YANXU_GITHUB_TOKEN; do
+            test -z "${!token_name:-}"
+          done
           sh scripts/install.sh
           version_output="$("$YANBAO_INSTALL_DIR/yanbao" --version | tr -d '\r')"
           expected="$(printf '言包 %s\n言序 %s' "$YANBAO_VERSION" "$YANXU_VERSION")"
@@ -724,16 +830,22 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         env:
-          YANBAO_GITHUB_TOKEN: ${{ github.token }}
+          YANBAO_ASSET_DIR: ${{ runner.temp }}\yanbao-published-assets
           YANBAO_INSTALL_DIR: ${{ runner.temp }}\yanbao\bin
           YANBAO_VERSION: ${{ needs.validate.outputs.version }}
         run: |
           $YanxuInstaller = Join-Path $env:RUNNER_TEMP "install-yanxu.ps1"
           Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/YanXuLang/yanxu/v$env:YANXU_VERSION/scripts/install.ps1" -OutFile $YanxuInstaller
-          $env:YANXU_GITHUB_TOKEN = $env:YANBAO_GITHUB_TOKEN
           $env:YANXU_INSTALL_DIR = Join-Path $env:RUNNER_TEMP "yanxu\bin"
           & $YanxuInstaller
           $env:YANXU_BIN = Join-Path $env:YANXU_INSTALL_DIR "yanxu.exe"
+          Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue
+          Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
+          Remove-Item Env:YANBAO_GITHUB_TOKEN -ErrorAction SilentlyContinue
+          Remove-Item Env:YANXU_GITHUB_TOKEN -ErrorAction SilentlyContinue
+          foreach ($TokenName in @("GH_TOKEN", "GITHUB_TOKEN", "YANBAO_GITHUB_TOKEN", "YANXU_GITHUB_TOKEN")) {
+            if (Test-Path "Env:$TokenName") { throw "发行包进程不得继承下载令牌" }
+          }
           $originalModulePath = $env:PSModulePath
           try {
             $env:PSModulePath = @(
@@ -756,7 +868,7 @@ jobs:
 
   finalize:
     name: 确认正式发行
-    needs: [validate, publicize, smoke]
+    needs: [validate, publicize, verify-published-assets, smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: write
