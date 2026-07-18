@@ -139,13 +139,14 @@ jobs:
           "$YANXU_BIN" test tests
           stage="$RUNNER_TEMP/yanbao-$TARGET"
           compile_source="$RUNNER_TEMP/yanbao-compile-source"
-          mkdir -p "$stage" dist
+          mkdir -p "$stage/schemas" dist
           rm -rf "$compile_source"
           mkdir -p "$compile_source"
           cp src/*.yx "$compile_source/"
           "$YANXU_BIN" compile "$compile_source/主.yx" -o "$stage/yanbao-app" --release --standalone
           install -m 755 yanbao "$stage/yanbao"
           install -m 644 LICENSE README.md CHANGELOG.md "$stage/"
+          install -m 644 schemas/yanbao-cli-output-v1.json "$stage/schemas/"
           test -z "$(find "$stage" -maxdepth 1 -type f -name 'yanxu*' -print -quit)"
           version_output="$("$stage/yanbao" --version | tr -d '\r')"
           expected="$(printf '言包 %s\n言序 %s' "$VERSION" "$YANXU_VERSION")"
@@ -175,12 +176,14 @@ jobs:
           $Stage = Join-Path $env:RUNNER_TEMP "yanbao-$env:TARGET"
           $Dist = Join-Path $env:GITHUB_WORKSPACE "dist"
           $CompileSource = Join-Path $env:RUNNER_TEMP "yanbao-compile-source"
-          New-Item -ItemType Directory -Force -Path $Stage, $Dist, $CompileSource | Out-Null
+          $SchemaDirectory = Join-Path $Stage "schemas"
+          New-Item -ItemType Directory -Force -Path $Stage, $Dist, $CompileSource, $SchemaDirectory | Out-Null
           Copy-Item "src\*.yx" $CompileSource
           $App = Join-Path $Stage "yanbao-app.exe"
           & $env:YANXU_BIN compile (Join-Path $CompileSource "主.yx") -o $App --release --standalone
           if ($LASTEXITCODE -ne 0) { throw "言包独立应用编译失败" }
           Copy-Item yanbao.cmd, yanbao.ps1, LICENSE, README.md, CHANGELOG.md $Stage
+          Copy-Item "schemas\yanbao-cli-output-v1.json" $SchemaDirectory
           $CmdPath = Join-Path $Stage "yanbao.cmd"
           $CmdText = [System.IO.File]::ReadAllText($CmdPath).Replace("`r`n", "`n").Replace("`n", "`r`n")
           [System.IO.File]::WriteAllText($CmdPath, $CmdText, [System.Text.UTF8Encoding]::new($false))
@@ -248,6 +251,7 @@ jobs:
               *.zip) entries="$(unzip -Z1 "dist/$archive")" ;;
               *) entries="$(tar -tzf "dist/$archive")" ;;
             esac
+            printf '%s\n' "$entries" | grep -Eq '(^|/)schemas/yanbao-cli-output-v1\.json$'
             if printf '%s\n' "$entries" | sed 's#/$##; s#^.*/##' | grep -Eq '^yanxu([.-]|$)'; then
               echo "$archive 不得包含言序运行时" >&2
               exit 1

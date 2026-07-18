@@ -69,6 +69,8 @@ yanbao 诊
 
 所有会启动言序子进程的命令都接受`--timeout <毫秒>`（中文别名`--超时`），也可设置`YANBAO_TIMEOUT`；命令行值优先于环境变量，合法范围为 1 至 86400000 毫秒。默认值按工作负载区分：元数据操作 1 分钟，检查与文档 5 分钟，解析、更新及网络审计 10 分钟，测试、打包与辖制 15 分钟，构建与 Bundle 30 分钟，`run`最多运行 24 小时。超时由言序运行时终止并回收子进程。
 
+所有命令支持`--message-format human|json|json-lines`（中文别名`--消息格式`）。`json`只在标准输出写一个最终结果；`json-lines`逐行写消息、诊断、变更和制品事件，并以结果事件结束。结果包含 Schema 版本、命令、成功状态、退出码、项目根、阶段、诊断、变更、制品和耗时；失败仍以非零进程状态退出，运行时踪迹写入标准错误。正式格式见[`schemas/yanbao-cli-output-v1.json`](schemas/yanbao-cli-output-v1.json)。
+
 `new --gui`（或`init --gui`）会加入官方 `yanxu-gui`（言窗）依赖、图形权限、应用标识与窗口配置；
 `build --bundle` 生成 macOS `.app`、Windows GUI 应用目录或 Linux AppDir。开发官方
 多仓工作区时可用 `--gui-path /路径/yanxu-gui` 锁定本地言窗包，普通用户无需此选项。

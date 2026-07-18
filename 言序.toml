@@ -30,7 +30,7 @@ UDP绑定 = []
 核心 = "src/核心.yx"
 
 [资源]
-目录 = ["README.md", "docs"]
+目录 = ["README.md", "docs", "schemas"]
 
 [构建]
 目标 = "字节码"
