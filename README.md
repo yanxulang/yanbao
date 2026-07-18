@@ -77,7 +77,9 @@ yanbao 诊
 
 `audit`默认拒绝`critical`和`high`发现，`medium`、`low`与`info`只报告而不改变成功状态。可用`--deny-level critical|high|medium|low|info|none`调整门禁；兼容选项`--deny-warnings`等价于`--deny-level medium`。`audit --json`是该命令的 JSON 输出简写，不能与`--message-format`同时使用。
 
-精确抑制使用可重复的`--suppress CODE@YYYY-MM-DD@reason`（中文别名`--抑制`），必须同时记录诊断代码、原因和 UTC 到期日。抑制在到期当天仍有效；过期项不再掩盖原发现，并额外报告`AUDIT_SUPPRESSION_EXPIRED`。重复代码、空原因、非法日期、未知严重度或冲突门禁配置都会以稳定审计代码失败。结构化结果中的`audit_summary`记录各严重度、拒绝数、抑制数和过期数，有效抑制另有`audit_suppressed`变更记录；未抑制且达到门禁的发现始终以`AUDIT_DENIED`和非零状态结束。
+审计覆盖锁定内容 SHA-256、依赖来源、Git 精确修订与符号修订、SPDX 许可证、索引撤回与漏洞元数据、重复版本、目标架构，以及原生制品的 ABI、目标、校验和与签名/来源证明状态。远程索引、制品和 Git 来源在访问前必须使用 HTTPS 或 SSH；本地路径和`file://`索引不受影响。索引未明确声明撤回或漏洞状态时会报告缺失元数据，不能把“未提供”当作“无风险”。
+
+精确抑制使用可重复的`--suppress CODE@YYYY-MM-DD@reason`（中文别名`--抑制`），必须同时记录诊断代码、原因和 UTC 到期日。漏洞代码包含公告标识，例如`AUDIT_VULNERABILITY_YXSA_2026_0001`，因此一项抑制不会掩盖其他漏洞。抑制在到期当天仍有效；过期项不再掩盖原发现，并额外报告`AUDIT_SUPPRESSION_EXPIRED`。重复代码、空原因、非法日期、未知或畸形核心发现及冲突门禁配置都会以稳定审计代码失败。结构化结果中的`audit_summary`记录各严重度、拒绝数、抑制数和过期数，有效抑制另有`audit_suppressed`变更记录；未抑制且达到门禁的发现始终以`AUDIT_DENIED`和非零状态结束。
 
 `new --gui`（或`init --gui`）会加入官方 `yanxu-gui`（言窗）依赖、图形权限、应用标识与窗口配置；
 `build --bundle` 生成 macOS `.app`、Windows GUI 应用目录或 Linux AppDir。开发官方

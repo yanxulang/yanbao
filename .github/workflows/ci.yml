@@ -370,6 +370,105 @@ jobs:
             any(.changes[]; .kind == "audit_summary" and .details.denied == 0 and .details.suppressed == 1)
           ' >/dev/null
 
+          audit_registry="$RUNNER_TEMP/yanbao-audit-registry"
+          audit_registry_package="$audit_registry/registry_dep/1.2.3"
+          mkdir -p "$audit_registry_package/src"
+          printf '%s\n' \
+            '[包]' '格式 = 2' '名称 = "registry_dep"' '版本 = "1.2.3"' \
+            '入口 = "src/主.yx"' '许可 = "MIT"' \
+            > "$audit_registry_package/言序.toml"
+          printf '%s\n' '公 定 值：数 为 1；' > "$audit_registry_package/src/主.yx"
+          registry_checksum="$(printf '%064s' '' | tr ' ' a)"
+          jq -n --arg checksum "$registry_checksum" '{
+            versions: [{
+              version: "1.2.3",
+              url: "https://packages.example.invalid/registry_dep-1.2.3.tar.gz",
+              checksum: $checksum,
+              yanked: true,
+              vulnerabilities: [{
+                id: "YXSA-2026-0001",
+                severity: "high",
+                summary: "六目标审计回归",
+                url: "https://security.example.invalid/YXSA-2026-0001"
+              }]
+            }]
+          }' > "$audit_registry/registry_dep/index.json"
+          audit_registry_project="$RUNNER_TEMP/yanbao-audit-registry-project"
+          YANXU_BIN="$YANXU_BIN" "$app" new "$audit_registry_project" --name audit_registry_project
+          YANXU_BIN="$YANXU_BIN" "$app" add registry_dep --registry "$audit_registry" \
+            --version '=1.2.3' --manifest-path "$audit_registry_project" --offline
+          set +e
+          audit_registry_denied="$(YANXU_BIN="$YANXU_BIN" "$app" audit \
+            --manifest-path "$audit_registry_project" --offline --json \
+            2>"$RUNNER_TEMP/yanbao-audit-registry-denied.log")"
+          audit_registry_status=$?
+          set -e
+          test "$audit_registry_status" -eq 1
+          printf '%s\n' "$audit_registry_denied" | jq -e '
+            .success == false and .exit_code == 1 and
+            any(.diagnostics[];
+              .code == "AUDIT_VULNERABILITY_YXSA_2026_0001" and
+              .severity == "high" and (.suggestion | length > 0)) and
+            any(.diagnostics[]; .code == "AUDIT_YANKED" and .severity == "medium") and
+            any(.changes[]; .kind == "audit_summary" and .details.denied == 1)
+          ' >/dev/null
+          audit_registry_suppressed="$(YANXU_BIN="$YANXU_BIN" "$app" audit \
+            --manifest-path "$audit_registry_project" --offline \
+            --suppress 'AUDIT_VULNERABILITY_YXSA_2026_0001@2099-12-31@等待安全版本' --json)"
+          printf '%s\n' "$audit_registry_suppressed" | jq -e '
+            .success == true and .exit_code == 0 and
+            any(.diagnostics[]; .code == "AUDIT_VULNERABILITY_YXSA_2026_0001" and .severity == "suppressed") and
+            any(.diagnostics[]; .code == "AUDIT_YANKED" and .severity == "medium") and
+            any(.changes[]; .kind == "audit_summary" and .details.denied == 0 and .details.suppressed == 1)
+          ' >/dev/null
+
+          audit_native_dependency="$RUNNER_TEMP/yanbao-audit-native-dependency"
+          mkdir -p "$audit_native_dependency/src" "$audit_native_dependency/native"
+          printf '%s\n' 'native audit fixture' > "$audit_native_dependency/native/backend.bin"
+          if command -v sha256sum >/dev/null 2>&1; then
+            native_checksum="$(sha256sum "$audit_native_dependency/native/backend.bin" | awk '{print $1}')"
+          else
+            native_checksum="$(shasum -a 256 "$audit_native_dependency/native/backend.bin" | awk '{print $1}')"
+          fi
+          native_size="$(wc -c < "$audit_native_dependency/native/backend.bin" | tr -d ' ')"
+          case "$RUNNER_OS" in
+            Linux) native_os=linux ;;
+            macOS) native_os=macos ;;
+            Windows) native_os=windows ;;
+            *) exit 1 ;;
+          esac
+          case "$RUNNER_ARCH" in
+            X64) native_arch=x86_64 ;;
+            ARM64) native_arch=aarch64 ;;
+            *) exit 1 ;;
+          esac
+          printf '%s\n' \
+            '[包]' '格式 = 2' '名称 = "native_dep"' '版本 = "1.0.0"' \
+            '入口 = "src/主.yx"' '许可 = "MIT"' \
+            '[原生]' 'ABI = 2' "[原生.$native_os.$native_arch]" \
+            '文件 = "native/backend.bin"' "校验和 = \"$native_checksum\"" "大小 = $native_size" \
+            > "$audit_native_dependency/言序.toml"
+          printf '%s\n' '公 定 值：数 为 1；' > "$audit_native_dependency/src/主.yx"
+          audit_native_project="$RUNNER_TEMP/yanbao-audit-native-project"
+          YANXU_BIN="$YANXU_BIN" "$app" new "$audit_native_project" --name audit_native_project
+          "$python_bin" - "$audit_native_project/言序.toml" <<'PY'
+          from pathlib import Path
+          import sys
+          path = Path(sys.argv[1])
+          text = path.read_text(encoding="utf-8")
+          path.write_text(text.replace("原生扩展 = false", "原生扩展 = true"), encoding="utf-8")
+          PY
+          YANXU_BIN="$YANXU_BIN" "$app" add native_dep --path "$audit_native_dependency" \
+            --manifest-path "$audit_native_project" --offline
+          audit_native="$(YANXU_BIN="$YANXU_BIN" "$app" audit \
+            --manifest-path "$audit_native_project" --offline --json)"
+          printf '%s\n' "$audit_native" | jq -e '
+            .success == true and .exit_code == 0 and
+            any(.diagnostics[];
+              .code == "AUDIT_NATIVE_UNSIGNED" and
+              .severity == "medium" and (.suggestion | length > 0))
+          ' >/dev/null
+
           transaction_root="$RUNNER_TEMP/yanbao-transaction-e2e"
           transaction_dependency="$transaction_root/dependency"
           transaction_project="$transaction_root/project"
