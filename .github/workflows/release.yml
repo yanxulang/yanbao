@@ -138,6 +138,18 @@ jobs:
           Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/YanXuLang/yanxu/v$env:YANXU_VERSION/scripts/install.ps1" -OutFile $Script
           & $Script
           "YANXU_BIN=$env:YANXU_INSTALL_DIR\yanxu.exe" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - name: 生成当前目标依赖锁
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          "$YANXU_BIN" package protocol \
+            '{"protocol_version":1,"operation":"resolve","path":".","offline":true}' \
+            > "$RUNNER_TEMP/yanbao-resolve.json"
+          jq -e --arg target "$TARGET" '.ok == true and .result.target == $target' \
+            "$RUNNER_TEMP/yanbao-resolve.json" >/dev/null
+          test "$(sed -n 's/^target = "\([^"]*\)"$/\1/p' 言序.lock)" = "$TARGET"
       - name: 构建并封装（Unix）
         if: matrix.windows == false
         shell: bash
@@ -236,7 +248,9 @@ jobs:
               application="$RUNNER_TEMP/yanbao-$TARGET/yanbao-app"
               ;;
           esac
-          sh scripts/generate-build-metadata.sh \
+          lockfile="dist/yanbao-$TARGET.lock"
+          cp 言序.lock "$lockfile"
+          YANBAO_LOCKFILE="$lockfile" sh scripts/generate-build-metadata.sh \
             "$TARGET" "$archive" "$application" "dist/yanbao-$TARGET.build.json"
       - name: 上传平台制品
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -270,9 +284,11 @@ jobs:
           YANBAO_SOURCE_REF: refs/tags/${{ env.RELEASE_TAG }}
         run: |
           set -euo pipefail
-          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 18
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 24
           test "$(find dist -maxdepth 1 -name '*.build.json' -type f | wc -l)" -eq 6
-          sh scripts/generate-sbom.sh "dist/yanbao-$VERSION.cdx.json"
+          test "$(find dist -maxdepth 1 -name '*.lock' -type f | wc -l)" -eq 6
+          YANBAO_LOCKFILE="dist/yanbao-x86_64-unknown-linux-gnu.lock" \
+            sh scripts/generate-sbom.sh "dist/yanbao-$VERSION.cdx.json"
       - name: 创建构建来源证明
         if: ${{ !inputs.build_only }}
         id: provenance
@@ -283,6 +299,7 @@ jobs:
             dist/*.zip
             dist/*.sha256
             dist/*.build.json
+            dist/*.lock
             dist/*.cdx.json
       - name: 创建 SBOM 证明
         if: ${{ !inputs.build_only }}
@@ -349,11 +366,13 @@ jobs:
             x86_64-apple-darwin aarch64-apple-darwin
             x86_64-pc-windows-msvc aarch64-pc-windows-msvc
           )
-          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 21
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 27
           command -v sha256sum >/dev/null
           command -v shasum >/dev/null
           manifest_sha="$(sha256sum 言序.toml | awk '{print $1}')"
-          lock_sha="$(sha256sum 言序.lock | awk '{print $1}')"
+          sbom_lock="dist/yanbao-x86_64-unknown-linux-gnu.lock"
+          test -s "$sbom_lock"
+          lock_sha="$(sha256sum "$sbom_lock" | awk '{print $1}')"
           sbom="dist/yanbao-$VERSION.cdx.json"
           provenance="dist/yanbao-$VERSION.provenance.jsonl"
           sbom_attestation="dist/yanbao-$VERSION.sbom-attestation.jsonl"
@@ -415,6 +434,11 @@ jobs:
             application_sha="$(sha256sum "$application" | awk '{print $1}')"
             application_bytes="$(wc -c < "$application" | tr -d ' ')"
             archive_sha="$(sha256sum "dist/$archive" | awk '{print $1}')"
+            lockfile="dist/yanbao-$target.lock"
+            test -s "$lockfile"
+            test "$(sed -n 's/^target = "\([^"]*\)"$/\1/p' "$lockfile")" = "$target"
+            test "$(sed -n 's/^manifest_checksum = "\([0-9a-f]*\)"$/\1/p' "$lockfile")" = "$manifest_sha"
+            lock_sha="$(sha256sum "$lockfile" | awk '{print $1}')"
             metadata="dist/yanbao-$target.build.json"
             test -s "$metadata"
             jq -e \
@@ -442,7 +466,8 @@ jobs:
                and .build.compiler.version == $minimum
                and .build.compiler.target == $target and .build.compiler.mode == "release"
                and .build.manifest.sha256 == $manifest_sha
-               and .build.lock.sha256 == $lock_sha
+               and .build.lock.sha256 == $lock_sha and .build.lock.target == $target
+               and .build.lock.manifest_sha256 == $manifest_sha
                and .application.version_info.version == $version
                and .application.version_info.yanxu_version == $minimum' \
               "$metadata" >/dev/null
@@ -611,9 +636,11 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir dist
-          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 21
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 27
           manifest_sha="$(sha256sum 言序.toml | awk '{print $1}')"
-          lock_sha="$(sha256sum 言序.lock | awk '{print $1}')"
+          sbom_lock="dist/yanbao-x86_64-unknown-linux-gnu.lock"
+          test -s "$sbom_lock"
+          lock_sha="$(sha256sum "$sbom_lock" | awk '{print $1}')"
           sbom="dist/yanbao-$VERSION.cdx.json"
           provenance="dist/yanbao-$VERSION.provenance.jsonl"
           sbom_attestation="dist/yanbao-$VERSION.sbom-attestation.jsonl"
@@ -660,6 +687,11 @@ jobs:
             application_sha="$(sha256sum "$application" | awk '{print $1}')"
             application_bytes="$(wc -c < "$application" | tr -d ' ')"
             archive_sha="$(sha256sum "dist/$archive" | awk '{print $1}')"
+            lockfile="dist/yanbao-$target.lock"
+            test -s "$lockfile"
+            test "$(sed -n 's/^target = "\([^"]*\)"$/\1/p' "$lockfile")" = "$target"
+            test "$(sed -n 's/^manifest_checksum = "\([0-9a-f]*\)"$/\1/p' "$lockfile")" = "$manifest_sha"
+            lock_sha="$(sha256sum "$lockfile" | awk '{print $1}')"
             jq -e \
               --arg version "$VERSION" \
               --arg minimum "$YANXU_VERSION" \
@@ -680,7 +712,8 @@ jobs:
                and .application.bytes == $application_bytes
                and .build.target == $target and .build.compiler.target == $target
                and .build.manifest.sha256 == $manifest_sha
-               and .build.lock.sha256 == $lock_sha' \
+               and .build.lock.sha256 == $lock_sha and .build.lock.target == $target
+               and .build.lock.manifest_sha256 == $manifest_sha' \
               "dist/yanbao-$target.build.json" >/dev/null
             gh attestation verify "dist/$archive" --repo "$GITHUB_REPOSITORY" \
               --signer-repo "$GITHUB_REPOSITORY" --bundle "$provenance" \
@@ -694,7 +727,7 @@ jobs:
             --draft=false --prerelease=false --latest --verify-tag
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --json isDraft,isPrerelease,assets \
-            --jq 'select(.isDraft == false and .isPrerelease == false and (.assets | length) == 21)' >/dev/null
+            --jq 'select(.isDraft == false and .isPrerelease == false and (.assets | length) == 27)' >/dev/null
 
   quarantine:
     name: 隔离验收失败的发行版

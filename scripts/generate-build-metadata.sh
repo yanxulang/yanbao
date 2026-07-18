@@ -44,14 +44,17 @@ done
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 root=$(git -C "$script_dir/.." rev-parse --show-toplevel)
 manifest="$root/言序.toml"
-lockfile="$root/言序.lock"
+lockfile=${YANBAO_LOCKFILE:-"$root/言序.lock"}
 version=$(sed -n 's/^版本 = "\([^"]*\)"$/\1/p' "$manifest")
 requirement=$(sed -n 's/^言序 = "\([^"]*\)"$/\1/p' "$manifest")
 minimum_yanxu=${requirement#>=}
 manifest_format=$(sed -n 's/^格式 = \([0-9][0-9]*\)$/\1/p' "$manifest")
 lock_format=$(sed -n 's/^lock_version = \([0-9][0-9]*\)$/\1/p' "$lockfile")
+lock_manifest_sha=$(sed -n 's/^manifest_checksum = "\([0-9a-f]*\)"$/\1/p' "$lockfile")
 lock_generator=$(sed -n 's/^generator = "\([^"]*\)"$/\1/p' "$lockfile")
 lock_target=$(sed -n 's/^target = "\([^"]*\)"$/\1/p' "$lockfile")
+manifest_sha=$(sha256_file "$manifest")
+lock_sha=$(sha256_file "$lockfile")
 
 for semantic_version in "$version" "$minimum_yanxu"; do
   if ! printf '%s\n' "$semantic_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
@@ -60,9 +63,18 @@ for semantic_version in "$version" "$minimum_yanxu"; do
   fi
 done
 if [ "$requirement" = "$minimum_yanxu" ] || [ -z "$manifest_format" ] || \
-   [ -z "$lock_format" ] || [ -z "$lock_generator" ] || [ -z "$lock_target" ]; then
+   [ -z "$lock_format" ] || [ -z "$lock_manifest_sha" ] || \
+   [ -z "$lock_generator" ] || [ -z "$lock_target" ]; then
   echo "清单或锁文件元数据不完整" >&2
   exit 2
+fi
+if [ "$lock_manifest_sha" != "$manifest_sha" ]; then
+  echo "锁文件清单摘要与当前言序.toml 不一致" >&2
+  exit 1
+fi
+if [ "$lock_target" != "$target" ]; then
+  echo "锁文件目标 $lock_target 与构建目标 $target 不一致" >&2
+  exit 1
 fi
 
 compiler=${YANXU_BIN:-}
@@ -100,8 +112,6 @@ EOF
 
 commit_sha=$(git -C "$root" rev-parse HEAD)
 source_epoch=$(git -C "$root" show -s --format=%ct HEAD)
-manifest_sha=$(sha256_file "$manifest")
-lock_sha=$(sha256_file "$lockfile")
 archive_sha=$(sha256_file "$archive")
 application_sha=$(sha256_file "$application")
 archive_bytes=$(wc -c < "$archive" | tr -d ' ')
@@ -164,6 +174,7 @@ jq -S -n \
       },
       lock: {
         format: ($lock_format | tonumber),
+        manifest_sha256: $manifest_sha,
         generator: $lock_generator,
         target: $lock_target,
         sha256: $lock_sha
@@ -189,6 +200,7 @@ jq -e \
    and .source.commit_sha == $commit
    and .build.target == $target and .build.profile == "release"
    and .build.standalone and (.build.separate_runtime_bundled | not)
+   and .build.lock.target == $target and .build.lock.manifest_sha256 == .build.manifest.sha256
    and .build.compiler.target == $target and .build.compiler.mode == "release"
    and (.artifact.sha256 | test("^[0-9a-f]{64}$"))
    and (.application.sha256 | test("^[0-9a-f]{64}$"))
