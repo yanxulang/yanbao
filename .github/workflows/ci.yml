@@ -484,7 +484,7 @@ jobs:
           test "$(rustc -vV | sed -n 's/^host: //p')" = "${{ matrix.target }}"
           cargo test --manifest-path yanxu-gui/Cargo.toml --workspace --locked
           cargo build --manifest-path yanxu-gui/Cargo.toml --workspace --release --locked
-          ./yanxu-gui/scripts/prepare-current.sh "$GITHUB_WORKSPACE/yanxu-gui"
+          ./yanxu-gui/scripts/prepare-current.sh yanxu-gui
           project="$RUNNER_TEMP/yanbao-gui-e2e"
           rm -rf "$project"
           ./yanbao new "$project" --name CI言窗 --gui --gui-path "$GITHUB_WORKSPACE/yanxu-gui" --force
