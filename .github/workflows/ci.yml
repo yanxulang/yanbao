@@ -41,7 +41,20 @@ jobs:
           fi
           minimum_version="${BASH_REMATCH[1]}"
           minimum_tag="v$minimum_version"
-          stable_tag="$(gh api repos/YanXuLang/yanxu/releases/latest --jq .tag_name)"
+
+          select_latest_core_tag() {
+            awk '/^v[0-9]+\.[0-9]+\.[0-9]+$/' | sort -V | tail -n 1
+          }
+          fixture_tag="$({
+            printf '%s\n' v1.1.15 yanxu-package-v1.1.16 v1.1.16 v1.1.17-rc.1
+          } | select_latest_core_tag)"
+          test "$fixture_tag" = "v1.1.16"
+
+          stable_tag="$(
+            gh api --paginate repos/YanXuLang/yanxu/releases \
+              --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' |
+              select_latest_core_tag
+          )"
           if [[ ! "$stable_tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             echo "言序最新正式 Release 标签无效：$stable_tag" >&2
             exit 1
