@@ -206,8 +206,8 @@ jobs:
           $Asset = "yanbao-$env:TARGET.zip"
           $Archive = Join-Path $Dist $Asset
           Compress-Archive -Path (Join-Path $Stage "*") -DestinationPath $Archive
-          $Checksum = (Get-FileHash -Algorithm SHA256 $Archive).Hash.ToLowerInvariant()
-          "$Checksum  $Asset" | Set-Content -Encoding ascii (Join-Path $Dist "yanbao-$env:TARGET.sha256")
+          $ChecksumPath = Join-Path $Dist "yanbao-$env:TARGET.sha256"
+          & "scripts\write-sha256.ps1" -InputPath $Archive -OutputPath $ChecksumPath -AssetName $Asset
       - name: 上传平台制品
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -242,11 +242,19 @@ jobs:
             x86_64-pc-windows-msvc aarch64-pc-windows-msvc
           )
           test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 12
+          command -v sha256sum >/dev/null
+          command -v shasum >/dev/null
           for target in "${targets[@]}"; do
             case "$target" in *windows*) archive="yanbao-$target.zip" ;; *) archive="yanbao-$target.tar.gz" ;; esac
             test -f "dist/$archive"
             test -f "dist/yanbao-$target.sha256"
+            test "$(wc -l < "dist/yanbao-$target.sha256")" -eq 1
+            if LC_ALL=C grep -q $'\r' "dist/yanbao-$target.sha256"; then
+              echo "yanbao-$target.sha256 不得包含 CR 字节" >&2
+              exit 1
+            fi
             (cd dist && sha256sum --check "yanbao-$target.sha256")
+            (cd dist && shasum -a 256 --check "yanbao-$target.sha256")
             case "$archive" in
               *.zip) entries="$(unzip -Z1 "dist/$archive")" ;;
               *) entries="$(tar -tzf "dist/$archive")" ;;

@@ -212,7 +212,7 @@ jobs:
           if (-not $CmdText.Contains("`r`n") -or $CmdText.Replace("`r`n", "").Contains("`n")) {
             throw "yanbao.cmd 必须只使用 CRLF 换行"
           }
-          foreach ($Path in @("yanbao.ps1", "scripts/install.ps1")) {
+          foreach ($Path in @("yanbao.ps1", "scripts/install.ps1", "scripts/write-sha256.ps1")) {
             $Bytes = [System.IO.File]::ReadAllBytes((Resolve-Path $Path))
             if ($Bytes | Where-Object { $_ -gt 127 }) { throw "$Path 必须只包含 ASCII 字符" }
             $Tokens = $null
@@ -227,6 +227,27 @@ jobs:
             ) -NoNewWindow -Wait -PassThru
             if ($WindowsPowerShell.ExitCode -ne 0) { throw "Windows PowerShell 5.1 无法解析 $Path" }
           }
+          $ChecksumFixture = Join-Path $env:RUNNER_TEMP "yanbao-checksum-fixture"
+          New-Item -ItemType Directory -Force -Path $ChecksumFixture | Out-Null
+          $FixtureAsset = Join-Path $ChecksumFixture "yanbao-test.zip"
+          [System.IO.File]::WriteAllBytes($FixtureAsset, [System.Text.Encoding]::ASCII.GetBytes("checksum fixture`n"))
+          $FixtureChecksum = Join-Path $ChecksumFixture "yanbao-test.sha256"
+          & "scripts\write-sha256.ps1" -InputPath $FixtureAsset -OutputPath $FixtureChecksum -AssetName "yanbao-test.zip"
+      - name: 交叉校验 Windows SHA-256 文件
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture="$RUNNER_TEMP/yanbao-checksum-fixture"
+          test "$(wc -l < "$fixture/yanbao-test.sha256")" -eq 1
+          if LC_ALL=C grep -q $'\r' "$fixture/yanbao-test.sha256"; then
+            echo "Windows SHA-256 校验文件不得包含 CR 字节" >&2
+            exit 1
+          fi
+          (cd "$fixture" && sha256sum --check yanbao-test.sha256)
+          if command -v shasum >/dev/null 2>&1; then
+            (cd "$fixture" && shasum -a 256 --check yanbao-test.sha256)
+          fi
       - name: 核对版本、能力与言包规格
         shell: bash
         run: sh scripts/verify-toolchain.sh
