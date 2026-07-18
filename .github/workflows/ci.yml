@@ -128,7 +128,7 @@ jobs:
         run: sh scripts/verify-toolchain.sh
 
   test:
-    name: 当前稳定 ${{ needs.toolchain-versions.outputs.stable_version }} / ${{ matrix.target }}
+    name: 当前稳定言序 / ${{ matrix.target }}
     needs: toolchain-versions
     strategy:
       fail-fast: false
