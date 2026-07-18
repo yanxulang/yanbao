@@ -36,7 +36,6 @@ concurrency:
 
 env:
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-  YANXU_VERSION: "1.1.7"
 
 jobs:
   validate:
@@ -44,6 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.metadata.outputs.version }}
+      yanxu_version: ${{ steps.metadata.outputs.yanxu_version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -58,12 +58,17 @@ jobs:
           toolchain="$(sed -n 's/^言序 = "\([^"]*\)"$/\1/p' 言序.toml)"
           test -n "$version"
           test "$RELEASE_TAG" = "v$version"
-          test "$toolchain" = ">=1.1.7"
+          if [[ ! "$toolchain" =~ ^\>\=([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "言序.toml 的最低版本必须使用 >=X.Y.Z" >&2
+            exit 1
+          fi
+          yanxu_version="${BASH_REMATCH[1]}"
           grep -Fqx "## $version" CHANGELOG.md
           git fetch origin main --no-tags
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
           test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$(git rev-parse HEAD)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "yanxu_version=$yanxu_version" >> "$GITHUB_OUTPUT"
 
   quality:
     name: 标签提交完整质量门禁
@@ -98,6 +103,8 @@ jobs:
             target: aarch64-pc-windows-msvc
             windows: true
     runs-on: ${{ matrix.runner }}
+    env:
+      YANXU_VERSION: ${{ needs.validate.outputs.yanxu_version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -268,6 +275,7 @@ jobs:
       - name: 生成发行说明
         env:
           VERSION: ${{ needs.validate.outputs.version }}
+          YANXU_VERSION: ${{ needs.validate.outputs.yanxu_version }}
         shell: bash
         run: |
           awk -v header="## $VERSION" '
@@ -276,11 +284,11 @@ jobs:
             found { print }
           ' CHANGELOG.md > release-notes.md
           test -s release-notes.md
-          cat >> release-notes.md <<'EOF'
+          sed "s/__YANXU_VERSION__/$YANXU_VERSION/g" >> release-notes.md <<'EOF'
 
           ### 安装
 
-          请先安装言序 1.1.7 或更高版本，并确保 `yanxu` 位于 `PATH` 中。
+          请先安装言序 __YANXU_VERSION__ 或更高版本，并确保 `yanxu` 位于 `PATH` 中。
 
           macOS / Linux：
 
@@ -337,6 +345,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      YANXU_VERSION: ${{ needs.validate.outputs.yanxu_version }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
