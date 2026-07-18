@@ -21,7 +21,7 @@
 终
 
 法 PowerShell（脚本：文，参数列：列<文>）：典 则
-    定 调用：列<文> 为【「-NoProfile」，「-NonInteractive」，「-ExecutionPolicy」，「Bypass」，「-Command」，脚本】；
+    定 调用：列<文> 为【「-NoProfile」，「-NonInteractive」，「-ExecutionPolicy」，「Bypass」，「-Command」，「& { 」加 脚本 加「 }」】；
     逐 参数 于 参数列 则 追加（调用，参数）；终
     归 进程.执行（「powershell.exe」，调用，环境.当前目录（），30000）；
 终
