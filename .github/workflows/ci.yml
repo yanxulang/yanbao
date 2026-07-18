@@ -306,6 +306,49 @@ jobs:
           YANXU_BIN="$YANXU_BIN" "$app" init "$standalone_project" --name 独立应用验收 --force
           YANXU_BIN="$YANXU_BIN" "$app" doctor --manifest-path "$standalone_project"
 
+          audit_dependency="$RUNNER_TEMP/yanbao-audit-dependency"
+          YANXU_BIN="$YANXU_BIN" "$app" new "$audit_dependency" --name audit_dependency
+          YANXU_BIN="$YANXU_BIN" "$app" add audit_dependency --path "$audit_dependency" \
+            --manifest-path "$standalone_project" --offline
+          audit_default="$(YANXU_BIN="$YANXU_BIN" "$app" audit \
+            --manifest-path "$standalone_project" --json)"
+          printf '%s\n' "$audit_default" | jq -e '
+            .success == true and .exit_code == 0 and
+            any(.diagnostics[]; .code == "AUDIT_LICENSE_MISSING" and .severity == "medium") and
+            any(.changes[]; .kind == "audit_summary" and .details.deny_level == "high" and .details.denied == 0)
+          ' >/dev/null
+          audit_expired="$(YANXU_BIN="$YANXU_BIN" "$app" audit \
+            --manifest-path "$standalone_project" \
+            --suppress 'AUDIT_LICENSE_MISSING@2000-01-01@历史测试例外' --json)"
+          printf '%s\n' "$audit_expired" | jq -e '
+            .success == true and
+            any(.diagnostics[]; .code == "AUDIT_SUPPRESSION_EXPIRED" and .severity == "medium") and
+            any(.changes[]; .kind == "audit_summary" and .details.suppressed == 0 and .details.expired_suppressions == 1)
+          ' >/dev/null
+          set +e
+          audit_denied="$(YANXU_BIN="$YANXU_BIN" "$app" audit \
+            --manifest-path "$standalone_project" --deny-level medium --json \
+            2>"$RUNNER_TEMP/yanbao-audit-denied.log")"
+          audit_denied_status=$?
+          set -e
+          test "$audit_denied_status" -eq 1
+          printf '%s\n' "$audit_denied" | jq -e '
+            .success == false and .exit_code == 1 and .phase == "failed" and
+            any(.diagnostics[]; .code == "AUDIT_LICENSE_MISSING" and .severity == "medium") and
+            any(.diagnostics[]; .code == "AUDIT_DENIED" and .severity == "error") and
+            any(.changes[]; .kind == "audit_summary" and .details.denied == 1)
+          ' >/dev/null
+          test -s "$RUNNER_TEMP/yanbao-audit-denied.log"
+          audit_suppressed="$(YANXU_BIN="$YANXU_BIN" "$app" audit \
+            --manifest-path "$standalone_project" --deny-level medium \
+            --suppress 'AUDIT_LICENSE_MISSING@2099-12-31@已复核测试依赖' --json)"
+          printf '%s\n' "$audit_suppressed" | jq -e '
+            .success == true and .exit_code == 0 and
+            any(.diagnostics[]; .code == "AUDIT_LICENSE_MISSING" and .severity == "suppressed") and
+            any(.changes[]; .kind == "audit_suppressed" and .details.code == "AUDIT_LICENSE_MISSING") and
+            any(.changes[]; .kind == "audit_summary" and .details.denied == 0 and .details.suppressed == 1)
+          ' >/dev/null
+
           transaction_root="$RUNNER_TEMP/yanbao-transaction-e2e"
           transaction_dependency="$transaction_root/dependency"
           transaction_project="$transaction_root/project"

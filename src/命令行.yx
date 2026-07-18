@@ -53,7 +53,7 @@
     若 命令 等于「outdated」则 归「yanbao outdated [--manifest-path <目录>] [--offline]」；终
     若 命令 等于「pack」则 归「yanbao pack [--manifest-path <目录>] [-o <文件>] [--offline]」；终
     若 命令 等于「vendor」则 归「yanbao vendor [--manifest-path <目录>] [-o <目录>] [--offline]」；终
-    若 命令 等于「audit」则 归「yanbao audit [--manifest-path <目录>] [--offline] [--deny-warnings]」；终
+    若 命令 等于「audit」则 归「yanbao audit [--deny-level <级别>] [--suppress <CODE@到期日@原因>] [选项]」；终
     若 命令 等于「version」则 归「yanbao version」；终
     若 命令 等于「help」则 归「yanbao help [命令]」；终
     归「yanbao <命令> [选项]」；
@@ -74,7 +74,7 @@
         归【「--help」，「-h」，「--workspace」，「--bundle」，「--应用包」，「--gui」，「--图形」，「--release」】；
     终
     若 命令 等于「pack」或 命令 等于「vendor」则 归【「--help」，「-h」，「--offline」】；终
-    若 命令 等于「audit」则 归【「--help」，「-h」，「--offline」，「--deny-warnings」】；终
+    若 命令 等于「audit」则 归【「--help」，「-h」，「--offline」，「--deny-warnings」，「--json」】；终
     归【「--help」，「-h」】；
 终
 
@@ -83,6 +83,7 @@
     若 命令 等于「add」则 归【「--manifest-path」，「--git」，「--path」，「--registry」，「--package」，「--version」，「--rev」，「--timeout」，「--超时」，「--message-format」，「--消息格式」】；终
     若 命令 等于「build」或 命令 等于「bundle」则 归【「--manifest-path」，「-o」，「--runtime」，「--timeout」，「--超时」，「--message-format」，「--消息格式」】；终
     若 命令 等于「doc」或 命令 等于「pack」或 命令 等于「vendor」则 归【「--manifest-path」，「-o」，「--timeout」，「--超时」，「--message-format」，「--消息格式」】；终
+    若 命令 等于「audit」则 归【「--manifest-path」，「--deny-level」，「--拒绝级别」，「--suppress」，「--抑制」，「--timeout」，「--超时」，「--message-format」，「--消息格式」】；终
     若 命令 等于「help」则 归【「--message-format」，「--消息格式」】；终
     若 命令 等于「version」则 归【「--timeout」，「--超时」，「--message-format」，「--消息格式」】；终
     归【「--manifest-path」，「--timeout」，「--超时」，「--message-format」，「--消息格式」】；
@@ -108,6 +109,11 @@
     若 含项（已见，「--recover」）且 含项（已见，「--恢复」）则
         参数错误（「CLI004」，「--recover 与 --恢复是同一选项，不能同时使用」，命令）；
     终
+    若 命令 等于「audit」则
+        若 含项（已见，「--deny-level」）且 含项（已见，「--拒绝级别」）则 参数错误（「CLI004」，「--deny-level 与 --拒绝级别是同一选项」，命令）；终
+        若 含项（已见，「--deny-warnings」）且（含项（已见，「--deny-level」）或 含项（已见，「--拒绝级别」））则 参数错误（「CLI004」，「--deny-warnings 与 --deny-level/--拒绝级别冲突」，命令）；终
+        若 含项（已见，「--json」）且（含项（已见，「--message-format」）或 含项（已见，「--消息格式」））则 参数错误（「CLI004」，「--json 与 --message-format/--消息格式冲突」，命令）；终
+    终
     若 命令 等于「add」则
         令 来源数 为 0；
         逐 名称 于【「--git」，「--path」，「--registry」】则 若 含项（已见，名称）则 置 来源数 为 来源数 加 1；终 终
@@ -119,6 +125,10 @@
             参数错误（「CLI004」，「--standalone 与 --bundle/--应用包/--gui/--图形 不能同时使用」，命令）；
         终
     终
+终
+
+法 可重复值选项（命令：文，名称：文）：理 则
+    归 命令 等于「audit」且（名称 等于「--suppress」或 名称 等于「--抑制」）；
 终
 
 公 法 帮助文字（命令：文）：文 则
@@ -162,7 +172,7 @@
                             若 参数 等于「--help」或 参数 等于「-h」则 置 求助 为 真；终
                         否则
                             若 含项（值选项，参数）则
-                                若 含项（已见，参数）则 参数错误（「CLI007」，「单值选项“」加 参数 加「”不能重复」，命令）；终
+                                若 含项（已见，参数）且 非 可重复值选项（命令，参数）则 参数错误（「CLI007」，「单值选项“」加 参数 加「”不能重复」，命令）；终
                                 追加（已见，参数）；追加（选项参数，参数）；置 待值选项 为 参数；
                             否则
                                 参数错误（「CLI002」，「命令“」加 命令 加「”不支持选项“」加 参数 加「”」，命令）；

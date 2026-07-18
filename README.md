@@ -57,6 +57,8 @@ yanbao 构 --release
 yanbao 构 --release --standalone
 yanbao 构 --release --bundle
 yanbao 应用包
+yanbao 审 --deny-level medium
+yanbao 审 --suppress 'AUDIT_LICENSE_MISSING@2026-12-31@已复核内部依赖'
 yanbao 清
 yanbao 诊
 ```
@@ -73,11 +75,15 @@ yanbao 诊
 
 所有命令支持`--message-format human|json|json-lines`（中文别名`--消息格式`）。`json`只在标准输出写一个最终结果；`json-lines`逐行写消息、诊断、变更和制品事件，并以结果事件结束。结果包含 Schema 版本、命令、成功状态、退出码、项目根、阶段、诊断、变更、制品和耗时；失败仍以非零进程状态退出，运行时踪迹写入标准错误。正式格式见[`schemas/yanbao-cli-output-v1.json`](schemas/yanbao-cli-output-v1.json)。
 
+`audit`默认拒绝`critical`和`high`发现，`medium`、`low`与`info`只报告而不改变成功状态。可用`--deny-level critical|high|medium|low|info|none`调整门禁；兼容选项`--deny-warnings`等价于`--deny-level medium`。`audit --json`是该命令的 JSON 输出简写，不能与`--message-format`同时使用。
+
+精确抑制使用可重复的`--suppress CODE@YYYY-MM-DD@reason`（中文别名`--抑制`），必须同时记录诊断代码、原因和 UTC 到期日。抑制在到期当天仍有效；过期项不再掩盖原发现，并额外报告`AUDIT_SUPPRESSION_EXPIRED`。重复代码、空原因、非法日期、未知严重度或冲突门禁配置都会以稳定审计代码失败。结构化结果中的`audit_summary`记录各严重度、拒绝数、抑制数和过期数，有效抑制另有`audit_suppressed`变更记录；未抑制且达到门禁的发现始终以`AUDIT_DENIED`和非零状态结束。
+
 `new --gui`（或`init --gui`）会加入官方 `yanxu-gui`（言窗）依赖、图形权限、应用标识与窗口配置；
 `build --bundle` 生成 macOS `.app`、Windows GUI 应用目录或 Linux AppDir。开发官方
 多仓工作区时可用 `--gui-path /路径/yanxu-gui` 锁定本地言窗包，普通用户无需此选项。
 
-`outdated`与`update --dry-run`只生成更新计划而不改写锁文件；`pack`生成固定时间戳、顺序和元数据的 `.yxp`；`vendor`复制完整锁定图供脱离原始依赖位置恢复；`audit`复核校验和、来源、许可证、重复版本和原生制品。
+`outdated`与`update --dry-run`只生成更新计划而不改写锁文件；`pack`生成固定时间戳、顺序和元数据的 `.yxp`；`vendor`复制完整锁定图供脱离原始依赖位置恢复；`audit`复核校验和、来源、许可证、重复版本和原生制品，并按上述门禁策略决定退出状态。
 
 ## 开发验证
 
