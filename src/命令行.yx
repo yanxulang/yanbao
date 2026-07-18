@@ -79,12 +79,13 @@
 终
 
 公 法 值选项列（命令：文）：列<文> 则
-    若 命令 等于「new」则 归【「--name」，「--gui-path」】；终
-    若 命令 等于「add」则 归【「--manifest-path」，「--git」，「--path」，「--registry」，「--package」，「--version」，「--rev」】；终
-    若 命令 等于「build」或 命令 等于「bundle」则 归【「--manifest-path」，「-o」，「--runtime」】；终
-    若 命令 等于「doc」或 命令 等于「pack」或 命令 等于「vendor」则 归【「--manifest-path」，「-o」】；终
-    若 命令 等于「help」或 命令 等于「version」则 归【】；终
-    归【「--manifest-path」】；
+    若 命令 等于「new」则 归【「--name」，「--gui-path」，「--timeout」，「--超时」】；终
+    若 命令 等于「add」则 归【「--manifest-path」，「--git」，「--path」，「--registry」，「--package」，「--version」，「--rev」，「--timeout」，「--超时」】；终
+    若 命令 等于「build」或 命令 等于「bundle」则 归【「--manifest-path」，「-o」，「--runtime」，「--timeout」，「--超时」】；终
+    若 命令 等于「doc」或 命令 等于「pack」或 命令 等于「vendor」则 归【「--manifest-path」，「-o」，「--timeout」，「--超时」】；终
+    若 命令 等于「help」则 归【】；终
+    若 命令 等于「version」则 归【「--timeout」，「--超时」】；终
+    归【「--manifest-path」，「--timeout」，「--超时」】；
 终
 
 法 最少位置数（命令：文）：数 则
@@ -98,6 +99,9 @@
 终
 
 法 检查冲突（命令：文，已见：列<文>）则
+    若 含项（已见，「--timeout」）且 含项（已见，「--超时」）则
+        参数错误（「CLI004」，「--timeout 与 --超时是同一选项，不能同时使用」，命令）；
+    终
     若 命令 等于「add」则
         令 来源数 为 0；
         逐 名称 于【「--git」，「--path」，「--registry」】则 若 含项（已见，名称）则 置 来源数 为 来源数 加 1；终 终

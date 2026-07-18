@@ -259,6 +259,14 @@ jobs:
           expect_cli_failure CLI003 add 包名 --version
           expect_cli_failure CLI002 build --unknown-option
           expect_cli_failure CLI004 build --standalone --bundle
+          set +e
+          invalid_timeout_output="$(YANBAO_TIMEOUT=invalid YANXU_BIN="$YANXU_BIN" "$app" version 2>&1)"
+          invalid_timeout_status=$?
+          set -e
+          test "$invalid_timeout_status" -eq 1
+          printf '%s\n' "$invalid_timeout_output" | grep -Fq '[CLI009]'
+          override_output="$(YANBAO_TIMEOUT=invalid YANXU_BIN="$YANXU_BIN" "$app" version --timeout 60000 | tr -d '\r')"
+          test "$override_output" = "$expected"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             cp "$app" yanbao-app.exe
             launcher_output="$(YANXU_BIN="$YANXU_BIN" ./yanbao.cmd --version | tr -d '\r')"
