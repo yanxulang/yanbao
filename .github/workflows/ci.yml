@@ -74,6 +74,47 @@ jobs:
             echo "stable_version=$stable_version"
             echo "yanbao_version=$yanbao_version"
           } >> "$GITHUB_OUTPUT"
+      - name: 检查许可与可复现 SBOM
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e Cargo.toml
+          test ! -e package.json
+          test -z "$(find src -name '*.rs' -print -quit)"
+          test "$(sed -n 's/^许可 = "\([^"]*\)"$/\1/p' 言序.toml)" = "MIT"
+          grep -Fqx "MIT License" LICENSE
+          sh -n yanbao scripts/install.sh scripts/verify-toolchain.sh \
+            scripts/generate-sbom.sh scripts/generate-build-metadata.sh
+          first="$RUNNER_TEMP/yanbao-sbom-first/yanbao.cdx.json"
+          second="$RUNNER_TEMP/yanbao-sbom-second/yanbao.cdx.json"
+          sh scripts/generate-sbom.sh "$first"
+          sh scripts/generate-sbom.sh "$second"
+          cmp "$first" "$second"
+          version="$(sed -n 's/^版本 = "\([^"]*\)"$/\1/p' 言序.toml)"
+          minimum="$(sed -n 's/^言序 = ">=\([^"]*\)"$/\1/p' 言序.toml)"
+          manifest_sha="$(sha256sum 言序.toml | awk '{print $1}')"
+          lock_sha="$(sha256sum 言序.lock | awk '{print $1}')"
+          jq -e \
+            --arg version "$version" \
+            --arg minimum "$minimum" \
+            --arg commit "$GITHUB_SHA" \
+            --arg manifest_sha "$manifest_sha" \
+            --arg lock_sha "$lock_sha" \
+            '.bomFormat == "CycloneDX" and .specVersion == "1.5"
+             and .metadata.component.version == $version
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:source:commit" and .value == $commit)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:manifest:sha256" and .value == $manifest_sha)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:lock:sha256" and .value == $lock_sha)] | length) == 1
+             and ([.components[] |
+               select(.name == "yanxu" and .version == $minimum and .scope == "required")] | length) == 1' \
+            "$first" >/dev/null
+          if grep -F "$GITHUB_WORKSPACE" "$first" >/dev/null; then
+            echo "SBOM 不得包含构建机绝对路径" >&2
+            exit 1
+          fi
 
   toolchain-compatibility:
     name: ${{ matrix.label }}
@@ -197,7 +238,8 @@ jobs:
         run: |
           test ! -e Cargo.toml
           test -z "$(find src -name '*.rs' -print -quit)"
-          sh -n yanbao scripts/install.sh scripts/verify-toolchain.sh
+          sh -n yanbao scripts/install.sh scripts/verify-toolchain.sh \
+            scripts/generate-sbom.sh scripts/generate-build-metadata.sh
           jq -e '."$id" == "https://yanxu.dev/schemas/yanbao-cli-output-v1.json"' schemas/yanbao-cli-output-v1.json >/dev/null
       - name: 检查纯言序实现与 Windows 脚本
         if: runner.os == 'Windows'
@@ -297,6 +339,28 @@ jobs:
           json_lines="$(YANXU_BIN="$YANXU_BIN" "$app" version --message-format json-lines)"
           printf '%s\n' "$json_lines" | jq -e '.schema_version == 1 and (.type == "message" or .type == "result")' >/dev/null
           test "$(printf '%s\n' "$json_lines" | jq -s 'map(select(.type == "result")) | length')" -eq 1
+          metadata_dir="$RUNNER_TEMP/yanbao-build-metadata"
+          mkdir -p "$metadata_dir"
+          archive_fixture="$metadata_dir/yanbao-${{ matrix.target }}.archive"
+          cp "$app" "$archive_fixture"
+          metadata="$metadata_dir/yanbao-${{ matrix.target }}.build.json"
+          YANXU_BIN="$YANXU_BIN" sh scripts/generate-build-metadata.sh \
+            "${{ matrix.target }}" "$archive_fixture" "$app" "$metadata"
+          jq -e \
+            --arg version "$YANBAO_EXPECTED_VERSION" \
+            --arg commit "$GITHUB_SHA" \
+            --arg target "${{ matrix.target }}" \
+            '.version == $version and .source.commit_sha == $commit
+             and .build.target == $target and .build.compiler.target == $target
+             and .build.profile == "release" and .build.standalone
+             and (.build.separate_runtime_bundled | not)' "$metadata" >/dev/null
+          mismatch="$metadata_dir/mismatched-target.build.json"
+          if YANXU_BIN="$YANXU_BIN" sh scripts/generate-build-metadata.sh \
+            "mismatch-${{ matrix.target }}" "$archive_fixture" "$app" "$mismatch"; then
+            echo "构建元数据脚本未拒绝编译器目标不匹配" >&2
+            exit 1
+          fi
+          test ! -e "$mismatch"
           set +e
           json_failure="$(YANXU_BIN="$YANXU_BIN" "$app" build --unknown-option --message-format json 2>"$RUNNER_TEMP/yanbao-json-error.log")"
           json_failure_status=$?
