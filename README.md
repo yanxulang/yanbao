@@ -63,6 +63,8 @@ yanbao 诊
 
 英文别名分别为 `new/init/add/remove/install/update/tree/why/check/test/run/build/bundle/clean/doctor`。`new`与`init`等价；`add`默认从 GitHub 取包：`json`和`yanxu-json`都解析为`yanxulang/yanxu-json`，`other-org/yanxu-json`则直接使用指定组织和仓库。本地别名会省略`yanxu-`前缀；`--package`可覆盖仓库内的实际包名。显式`--git`、`--path`和`--registry`仍可用于自定义来源。
 
+命令行会在访问工程前严格检查未知选项、缺少的选项值、多余位置参数和互斥选项，并以稳定诊断代码和用法提示失败。`yanbao help <命令>`或`yanbao <命令> --help`可查看子命令选项；只有`run`接受`--`后的原样程序参数。
+
 使用 `--manifest-path <目录>`指定项目；`add/remove`在重新解析失败时恢复清单和锁文件；`--no-lock`可只编辑清单。
 
 `new --gui`（或`init --gui`）会加入官方 `yanxu-gui`（言窗）依赖、图形权限、应用标识与窗口配置；
