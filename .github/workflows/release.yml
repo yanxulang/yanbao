@@ -401,6 +401,18 @@ jobs:
               echo "$archive 不得包含言序运行时" >&2
               exit 1
             fi
+            extracted="$RUNNER_TEMP/yanbao-release-$target"
+            mkdir -p "$extracted"
+            case "$archive" in
+              *.zip) unzip -q "dist/$archive" -d "$extracted" ;;
+              *) tar -xzf "dist/$archive" -C "$extracted" ;;
+            esac
+            application_name="yanbao-app"
+            case "$target" in *windows*) application_name="yanbao-app.exe" ;; esac
+            test "$(find "$extracted" -type f -name "$application_name" | wc -l)" -eq 1
+            application="$(find "$extracted" -type f -name "$application_name")"
+            application_sha="$(sha256sum "$application" | awk '{print $1}')"
+            application_bytes="$(wc -c < "$application" | tr -d ' ')"
             archive_sha="$(sha256sum "dist/$archive" | awk '{print $1}')"
             metadata="dist/yanbao-$target.build.json"
             test -s "$metadata"
@@ -412,12 +424,18 @@ jobs:
               --arg target "$target" \
               --arg archive "$archive" \
               --arg archive_sha "$archive_sha" \
+              --arg application "$application_name" \
+              --arg application_sha "$application_sha" \
+              --argjson application_bytes "$application_bytes" \
               --arg manifest_sha "$manifest_sha" \
               --arg lock_sha "$lock_sha" \
               '.schema_version == 1 and .version == $version
                and .minimum_yanxu_version == $minimum
                and .source.commit_sha == $commit and .source.ref == $ref
                and .artifact.name == $archive and .artifact.sha256 == $archive_sha
+               and .application.name == $application
+               and .application.sha256 == $application_sha
+               and .application.bytes == $application_bytes
                and .build.target == $target and .build.profile == "release"
                and .build.standalone and (.build.separate_runtime_bundled | not)
                and .build.compiler.version == $minimum
@@ -622,6 +640,18 @@ jobs:
             case "$target" in *windows*) archive="yanbao-$target.zip" ;; *) archive="yanbao-$target.tar.gz" ;; esac
             (cd dist && sha256sum --check "yanbao-$target.sha256")
             (cd dist && shasum -a 256 --check "yanbao-$target.sha256")
+            extracted="$RUNNER_TEMP/yanbao-release-$target"
+            mkdir -p "$extracted"
+            case "$archive" in
+              *.zip) unzip -q "dist/$archive" -d "$extracted" ;;
+              *) tar -xzf "dist/$archive" -C "$extracted" ;;
+            esac
+            application_name="yanbao-app"
+            case "$target" in *windows*) application_name="yanbao-app.exe" ;; esac
+            test "$(find "$extracted" -type f -name "$application_name" | wc -l)" -eq 1
+            application="$(find "$extracted" -type f -name "$application_name")"
+            application_sha="$(sha256sum "$application" | awk '{print $1}')"
+            application_bytes="$(wc -c < "$application" | tr -d ' ')"
             archive_sha="$(sha256sum "dist/$archive" | awk '{print $1}')"
             jq -e \
               --arg version "$VERSION" \
@@ -630,11 +660,17 @@ jobs:
               --arg target "$target" \
               --arg archive "$archive" \
               --arg archive_sha "$archive_sha" \
+              --arg application "$application_name" \
+              --arg application_sha "$application_sha" \
+              --argjson application_bytes "$application_bytes" \
               --arg manifest_sha "$manifest_sha" \
               --arg lock_sha "$lock_sha" \
               '.version == $version and .minimum_yanxu_version == $minimum
                and .source.commit_sha == $commit
                and .artifact.name == $archive and .artifact.sha256 == $archive_sha
+               and .application.name == $application
+               and .application.sha256 == $application_sha
+               and .application.bytes == $application_bytes
                and .build.target == $target and .build.compiler.target == $target
                and .build.manifest.sha256 == $manifest_sha
                and .build.lock.sha256 == $lock_sha' \
