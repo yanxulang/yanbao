@@ -1,0 +1,183 @@
+引「标准:文字」为 文字；
+
+法 含项（项目列：列<文>，期望：文）：理 则
+    逐 项 于 项目列 则 若 项 等于 期望 则 归 真；终 终
+    归 假；
+终
+
+法 参数错误（代码：文，消息：文，命令：文）则
+    抛「[」加 代码 加「] 」加 消息 加「；用法：」加 用法（命令）；
+终
+
+公 法 规范命令（输入：文）：文 则
+    若 输入 等于「新」或 输入 等于「init」或 输入 等于「new」则 归「new」；终
+    若 输入 等于「加」或 输入 等于「add」则 归「add」；终
+    若 输入 等于「移」或 输入 等于「remove」则 归「remove」；终
+    若 输入 等于「装」或 输入 等于「install」则 归「install」；终
+    若 输入 等于「更」或 输入 等于「update」则 归「update」；终
+    若 输入 等于「查」或 输入 等于「check」则 归「check」；终
+    若 输入 等于「试」或 输入 等于「test」则 归「test」；终
+    若 输入 等于「行」或 输入 等于「run」则 归「run」；终
+    若 输入 等于「构」或 输入 等于「build」则 归「build」；终
+    若 输入 等于「应用包」或 输入 等于「bundle」则 归「bundle」；终
+    若 输入 等于「清」或 输入 等于「clean」则 归「clean」；终
+    若 输入 等于「树」或 输入 等于「tree」则 归「tree」；终
+    若 输入 等于「因」或 输入 等于「why」则 归「why」；终
+    若 输入 等于「诊」或 输入 等于「doctor」则 归「doctor」；终
+    若 输入 等于「文」或 输入 等于「doc」则 归「doc」；终
+    若 输入 等于「旧」或 输入 等于「outdated」则 归「outdated」；终
+    若 输入 等于「包」或 输入 等于「pack」则 归「pack」；终
+    若 输入 等于「辖」或 输入 等于「vendor」则 归「vendor」；终
+    若 输入 等于「审」或 输入 等于「audit」则 归「audit」；终
+    若 输入 等于「版」或 输入 等于「version」或 输入 等于「--version」或 输入 等于「-V」则 归「version」；终
+    若 输入 等于「助」或 输入 等于「help」或 输入 等于「--help」或 输入 等于「-h」则 归「help」；终
+    抛「[CLI001] 不识言包命令“」加 输入 加「”；用法：yanbao <命令> [选项]」；
+终
+
+公 法 用法（命令：文）：文 则
+    若 命令 等于「new」则 归「yanbao new/init [目录] [--name <名称>] [--gui] [--force]」；终
+    若 命令 等于「add」则 归「yanbao add <包名> [--git|--path|--registry <来源>] [选项]」；终
+    若 命令 等于「remove」则 归「yanbao remove <依赖别名> [选项]」；终
+    若 命令 等于「install」则 归「yanbao install [--manifest-path <目录>] [--offline]」；终
+    若 命令 等于「update」则 归「yanbao update [--dry-run] [--offline] [选项]」；终
+    若 命令 等于「check」则 归「yanbao check [--manifest-path <目录>] [--workspace]」；终
+    若 命令 等于「test」则 归「yanbao test [--manifest-path <目录>] [--workspace] [--json]」；终
+    若 命令 等于「run」则 归「yanbao run [--manifest-path <目录>] [-- <程序参数>...]」；终
+    若 命令 等于「build」则 归「yanbao build [--release] [--standalone|--bundle] [选项]」；终
+    若 命令 等于「bundle」则 归「yanbao bundle [--release] [选项]」；终
+    若 命令 等于「clean」则 归「yanbao clean [--manifest-path <目录>] [--workspace]」；终
+    若 命令 等于「tree」则 归「yanbao tree [--manifest-path <目录>] [--offline]」；终
+    若 命令 等于「why」则 归「yanbao why <依赖> [--manifest-path <目录>] [--offline]」；终
+    若 命令 等于「doctor」则 归「yanbao doctor [--manifest-path <目录>]」；终
+    若 命令 等于「doc」则 归「yanbao doc [--manifest-path <目录>] [-o <文件>]」；终
+    若 命令 等于「outdated」则 归「yanbao outdated [--manifest-path <目录>] [--offline]」；终
+    若 命令 等于「pack」则 归「yanbao pack [--manifest-path <目录>] [-o <文件>] [--offline]」；终
+    若 命令 等于「vendor」则 归「yanbao vendor [--manifest-path <目录>] [-o <目录>] [--offline]」；终
+    若 命令 等于「audit」则 归「yanbao audit [--manifest-path <目录>] [--offline] [--deny-warnings]」；终
+    若 命令 等于「version」则 归「yanbao version」；终
+    若 命令 等于「help」则 归「yanbao help [命令]」；终
+    归「yanbao <命令> [选项]」；
+终
+
+公 法 旗标列（命令：文）：列<文> 则
+    若 命令 等于「new」则 归【「--help」，「-h」，「--gui」，「--图形」，「--force」，「--offline」】；终
+    若 命令 等于「add」或 命令 等于「remove」则 归【「--help」，「-h」，「--dev」，「--no-lock」，「--offline」】；终
+    若 命令 等于「install」则 归【「--help」，「-h」，「--offline」，「--workspace」】；终
+    若 命令 等于「update」则 归【「--help」，「-h」，「--offline」，「--workspace」，「--dry-run」】；终
+    若 命令 等于「outdated」或 命令 等于「tree」或 命令 等于「why」则 归【「--help」，「-h」，「--offline」】；终
+    若 命令 等于「check」或 命令 等于「clean」则 归【「--help」，「-h」，「--workspace」】；终
+    若 命令 等于「test」则 归【「--help」，「-h」，「--workspace」，「--json」】；终
+    若 命令 等于「build」则
+        归【「--help」，「-h」，「--workspace」，「--standalone」，「--bundle」，「--应用包」，「--gui」，「--图形」，「--release」】；
+    终
+    若 命令 等于「bundle」则
+        归【「--help」，「-h」，「--workspace」，「--bundle」，「--应用包」，「--gui」，「--图形」，「--release」】；
+    终
+    若 命令 等于「pack」或 命令 等于「vendor」则 归【「--help」，「-h」，「--offline」】；终
+    若 命令 等于「audit」则 归【「--help」，「-h」，「--offline」，「--deny-warnings」】；终
+    归【「--help」，「-h」】；
+终
+
+公 法 值选项列（命令：文）：列<文> 则
+    若 命令 等于「new」则 归【「--name」，「--gui-path」】；终
+    若 命令 等于「add」则 归【「--manifest-path」，「--git」，「--path」，「--registry」，「--package」，「--version」，「--rev」】；终
+    若 命令 等于「build」或 命令 等于「bundle」则 归【「--manifest-path」，「-o」，「--runtime」】；终
+    若 命令 等于「doc」或 命令 等于「pack」或 命令 等于「vendor」则 归【「--manifest-path」，「-o」】；终
+    若 命令 等于「help」或 命令 等于「version」则 归【】；终
+    归【「--manifest-path」】；
+终
+
+法 最少位置数（命令：文）：数 则
+    若 命令 等于「add」或 命令 等于「remove」或 命令 等于「why」则 归 1；终
+    归 0；
+终
+
+法 最多位置数（命令：文）：数 则
+    若 命令 等于「new」或 命令 等于「add」或 命令 等于「remove」或 命令 等于「why」或 命令 等于「help」则 归 1；终
+    归 0；
+终
+
+法 检查冲突（命令：文，已见：列<文>）则
+    若 命令 等于「add」则
+        令 来源数 为 0；
+        逐 名称 于【「--git」，「--path」，「--registry」】则 若 含项（已见，名称）则 置 来源数 为 来源数 加 1；终 终
+        若 来源数 大于 1 则 参数错误（「CLI004」，「--git、--path 与 --registry 互斥」，命令）；终
+    终
+    若 命令 等于「build」或 命令 等于「bundle」则
+        定 应用包 为 含项（已见，「--bundle」）或 含项（已见，「--应用包」）或 含项（已见，「--gui」）或 含项（已见，「--图形」）；
+        若 含项（已见，「--standalone」）且 应用包 则
+            参数错误（「CLI004」，「--standalone 与 --bundle/--应用包/--gui/--图形 不能同时使用」，命令）；
+        终
+    终
+终
+
+公 法 帮助文字（命令：文）：文 则
+    定 旗标 为 旗标列（命令）；
+    定 值选项 为 值选项列（命令）；
+    定 展示：列<文> 为【】；
+    逐 名称 于 旗标 则 追加（展示，名称）；终
+    逐 名称 于 值选项 则 追加（展示，名称 加「 <值>」）；终
+    若 长度（展示）等于 0 则 归「用法：」加 用法（命令）；终
+    归「用法：」加 用法（命令）加「\n选项：」加 文字.联结（展示，「、」）；
+终
+
+公 法 解析（输入命令：文，原始参数：列<文>）：典 则
+    定 命令 为 规范命令（输入命令）；
+    定 旗标 为 旗标列（命令）；
+    定 值选项 为 值选项列（命令）；
+    定 位置参数：列<文> 为【】；
+    定 选项参数：列<文> 为【】；
+    定 透传参数：列<文> 为【】；
+    定 已见：列<文> 为【】；
+    令 待值选项 为「」；
+    令 分隔后 为 假；
+    令 使用分隔符 为 假；
+    令 求助 为 假；
+    逐 参数 于 原始参数 则
+        若 分隔后 则
+            追加（透传参数，参数）；
+        否则
+            若 待值选项 不等于「」则
+                若 文字.始于（参数，「-」）则 参数错误（「CLI003」，「选项“」加 待值选项 加「”缺少值，不能把“」加 参数 加「”作为值」，命令）；终
+                追加（选项参数，参数）；
+                置 待值选项 为「」；
+            否则
+                若 参数 等于「--」则
+                    若 命令 不等于「run」则 参数错误（「CLI008」，「命令“」加 命令 加「”不接受 -- 透传参数」，命令）；终
+                    置 分隔后 为 真；置 使用分隔符 为 真；
+                否则
+                    若 文字.始于（参数，「-」）则
+                        若 含项（旗标，参数）则
+                            追加（已见，参数）；追加（选项参数，参数）；
+                            若 参数 等于「--help」或 参数 等于「-h」则 置 求助 为 真；终
+                        否则
+                            若 含项（值选项，参数）则
+                                若 含项（已见，参数）则 参数错误（「CLI007」，「单值选项“」加 参数 加「”不能重复」，命令）；终
+                                追加（已见，参数）；追加（选项参数，参数）；置 待值选项 为 参数；
+                            否则
+                                参数错误（「CLI002」，「命令“」加 命令 加「”不支持选项“」加 参数 加「”」，命令）；
+                            终
+                        终
+                    否则
+                        追加（位置参数，参数）；
+                    终
+                终
+            终
+        终
+    终
+    若 待值选项 不等于「」则 参数错误（「CLI003」，「选项“」加 待值选项 加「”缺少值」，命令）；终
+    若 长度（位置参数）小于 最少位置数（命令）则 参数错误（「CLI005」，「命令“」加 命令 加「”缺少必选位置参数」，命令）；终
+    若 长度（位置参数）大于 最多位置数（命令）则 参数错误（「CLI006」，「命令“」加 命令 加「”收到多余位置参数“」加 位置参数【最多位置数（命令）】加「”」，命令）；终
+    检查冲突（命令，已见）；
+    定 规范参数：列<文> 为【】；
+    逐 参数 于 位置参数 则 追加（规范参数，参数）；终
+    逐 参数 于 选项参数 则 追加（规范参数，参数）；终
+    若 使用分隔符 则
+        追加（规范参数，「--」）；
+        逐 参数 于 透传参数 则 追加（规范参数，参数）；终
+    终
+    归 {
+        「command」：命令，「arguments」：规范参数，「positionals」：位置参数，
+        「passthrough」：透传参数，「help」：求助
+    }；
+终

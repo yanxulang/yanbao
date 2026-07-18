@@ -243,6 +243,22 @@ jobs:
           version_output="$(YANXU_BIN="$YANXU_BIN" "$app" --version | tr -d '\r')"
           expected="$(printf '言包 %s\n言序 %s' "$YANBAO_EXPECTED_VERSION" "$YANXU_EXPECTED_VERSION")"
           test "$version_output" = "$expected"
+          help_output="$(YANXU_BIN="$YANXU_BIN" "$app" build --help | tr -d '\r')"
+          printf '%s\n' "$help_output" | grep -Fq 'yanbao build'
+          expect_cli_failure() {
+            code="$1"
+            shift
+            set +e
+            output="$(YANXU_BIN="$YANXU_BIN" "$app" "$@" 2>&1)"
+            status=$?
+            set -e
+            test "$status" -eq 1
+            printf '%s\n' "$output" | grep -Fq "[$code]"
+          }
+          expect_cli_failure CLI003 clean --manifest-path
+          expect_cli_failure CLI003 add 包名 --version
+          expect_cli_failure CLI002 build --unknown-option
+          expect_cli_failure CLI004 build --standalone --bundle
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             cp "$app" yanbao-app.exe
             launcher_output="$(YANXU_BIN="$YANXU_BIN" ./yanbao.cmd --version | tr -d '\r')"
