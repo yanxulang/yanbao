@@ -248,7 +248,10 @@ jobs:
               *.zip) entries="$(unzip -Z1 "dist/$archive")" ;;
               *) entries="$(tar -tzf "dist/$archive")" ;;
             esac
-            ! printf '%s\n' "$entries" | sed 's#/$##; s#^.*/##' | grep -Eq '^yanxu([.-]|$)'
+            if printf '%s\n' "$entries" | sed 's#/$##; s#^.*/##' | grep -Eq '^yanxu([.-]|$)'; then
+              echo "$archive 不得包含言序运行时" >&2
+              exit 1
+            fi
           done
       - name: 生成发行说明
         env:
