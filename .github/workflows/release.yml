@@ -45,6 +45,7 @@ jobs:
       version: ${{ steps.metadata.outputs.version }}
       yanxu_version: ${{ steps.metadata.outputs.yanxu_version }}
       commit: ${{ steps.metadata.outputs.commit }}
+      attestation_ref: ${{ steps.metadata.outputs.attestation_ref }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -72,10 +73,19 @@ jobs:
             echo "标签 $RELEASE_TAG 的提交 $tag_commit 不属于 origin/main 主线" >&2
             exit 1
           fi
+          if [[ "$GITHUB_SHA" != "$tag_commit" ]]; then
+            echo "发行证明要求工作流提交与标签提交一致" >&2
+            exit 1
+          fi
+          case "$GITHUB_REF" in
+            "refs/tags/$RELEASE_TAG"|refs/heads/main) ;;
+            *) echo "发行只能从目标标签或同提交 main 触发，当前为 $GITHUB_REF" >&2; exit 1 ;;
+          esac
           {
             echo "version=$version"
             echo "yanxu_version=$yanxu_version"
             echo "commit=$tag_commit"
+            echo "attestation_ref=$GITHUB_REF"
           } >> "$GITHUB_OUTPUT"
 
   quality:
@@ -361,6 +371,7 @@ jobs:
           VERSION: ${{ needs.validate.outputs.version }}
           YANXU_VERSION: ${{ needs.validate.outputs.yanxu_version }}
           COMMIT_SHA: ${{ needs.validate.outputs.commit }}
+          ATTESTATION_REF: ${{ needs.validate.outputs.attestation_ref }}
           REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
@@ -376,13 +387,45 @@ jobs:
           manifest_sha="$(sha256sum 言序.toml | awk '{print $1}')"
           sbom_lock="dist/yanbao-x86_64-unknown-linux-gnu.lock"
           test -s "$sbom_lock"
-          lock_sha="$(sha256sum "$sbom_lock" | awk '{print $1}')"
           sbom="dist/yanbao-$VERSION.cdx.json"
           provenance="dist/yanbao-$VERSION.provenance.jsonl"
           sbom_attestation="dist/yanbao-$VERSION.sbom-attestation.jsonl"
           test -s "$sbom"
           test -s "$provenance"
           test -s "$sbom_attestation"
+          subjects=("yanbao-$VERSION.cdx.json")
+          archives=()
+          for target in "${targets[@]}"; do
+            case "$target" in
+              *windows*) archive="yanbao-$target.zip" ;;
+              *) archive="yanbao-$target.tar.gz" ;;
+            esac
+            archives+=("$archive")
+            subjects+=(
+              "$archive"
+              "yanbao-$target.sha256"
+              "yanbao-$target.build.json"
+              "yanbao-$target.lock"
+            )
+          done
+          test "${#subjects[@]}" -eq 25
+          for subject in "${subjects[@]}"; do
+            test -s "dist/$subject"
+            gh attestation verify "dist/$subject" --repo "$REPOSITORY" \
+              --signer-workflow "$REPOSITORY/.github/workflows/release.yml" \
+              --bundle "$provenance" \
+              --source-digest "$COMMIT_SHA" \
+              --source-ref "$ATTESTATION_REF" >/dev/null
+          done
+          for archive in "${archives[@]}"; do
+            gh attestation verify "dist/$archive" --repo "$REPOSITORY" \
+              --signer-workflow "$REPOSITORY/.github/workflows/release.yml" \
+              --bundle "$sbom_attestation" \
+              --predicate-type "https://cyclonedx.org/bom" \
+              --source-digest "$COMMIT_SHA" \
+              --source-ref "$ATTESTATION_REF" >/dev/null
+          done
+          lock_sha="$(sha256sum "$sbom_lock" | awk '{print $1}')"
           jq -e \
             --arg version "$VERSION" \
             --arg minimum "$YANXU_VERSION" \
@@ -475,13 +518,6 @@ jobs:
                and .application.version_info.version == $version
                and .application.version_info.yanxu_version == $minimum' \
               "$metadata" >/dev/null
-            gh attestation verify "dist/$archive" --repo "$REPOSITORY" \
-              --signer-repo "$REPOSITORY" --bundle "$provenance" \
-              --source-digest "$COMMIT_SHA" >/dev/null
-            gh attestation verify "dist/$archive" --repo "$REPOSITORY" \
-              --signer-repo "$REPOSITORY" --bundle "$sbom_attestation" \
-              --predicate-type "https://cyclonedx.org/bom" \
-              --source-digest "$COMMIT_SHA" >/dev/null
           done
       - name: 生成发行说明
         env:
@@ -636,21 +672,59 @@ jobs:
           VERSION: ${{ needs.validate.outputs.version }}
           YANXU_VERSION: ${{ needs.validate.outputs.yanxu_version }}
           COMMIT_SHA: ${{ needs.validate.outputs.commit }}
+          ATTESTATION_REF: ${{ needs.validate.outputs.attestation_ref }}
         run: |
           set -euo pipefail
           mkdir -p dist
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir dist
           test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 27
+          targets=(
+            x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+            x86_64-apple-darwin aarch64-apple-darwin
+            x86_64-pc-windows-msvc aarch64-pc-windows-msvc
+          )
           manifest_sha="$(sha256sum 言序.toml | awk '{print $1}')"
           sbom_lock="dist/yanbao-x86_64-unknown-linux-gnu.lock"
           test -s "$sbom_lock"
-          lock_sha="$(sha256sum "$sbom_lock" | awk '{print $1}')"
           sbom="dist/yanbao-$VERSION.cdx.json"
           provenance="dist/yanbao-$VERSION.provenance.jsonl"
           sbom_attestation="dist/yanbao-$VERSION.sbom-attestation.jsonl"
           test -s "$sbom"
           test -s "$provenance"
           test -s "$sbom_attestation"
+          subjects=("yanbao-$VERSION.cdx.json")
+          archives=()
+          for target in "${targets[@]}"; do
+            case "$target" in
+              *windows*) archive="yanbao-$target.zip" ;;
+              *) archive="yanbao-$target.tar.gz" ;;
+            esac
+            archives+=("$archive")
+            subjects+=(
+              "$archive"
+              "yanbao-$target.sha256"
+              "yanbao-$target.build.json"
+              "yanbao-$target.lock"
+            )
+          done
+          test "${#subjects[@]}" -eq 25
+          for subject in "${subjects[@]}"; do
+            test -s "dist/$subject"
+            gh attestation verify "dist/$subject" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --bundle "$provenance" \
+              --source-digest "$COMMIT_SHA" \
+              --source-ref "$ATTESTATION_REF" >/dev/null
+          done
+          for archive in "${archives[@]}"; do
+            gh attestation verify "dist/$archive" --repo "$GITHUB_REPOSITORY" \
+              --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/release.yml" \
+              --bundle "$sbom_attestation" \
+              --predicate-type "https://cyclonedx.org/bom" \
+              --source-digest "$COMMIT_SHA" \
+              --source-ref "$ATTESTATION_REF" >/dev/null
+          done
+          lock_sha="$(sha256sum "$sbom_lock" | awk '{print $1}')"
           jq -e \
             --arg version "$VERSION" \
             --arg minimum "$YANXU_VERSION" \
@@ -669,11 +743,6 @@ jobs:
              and ([.components[] |
                select(.name == "yanxu" and .version == $minimum and .scope == "required")] | length) == 1' \
             "$sbom" >/dev/null
-          targets=(
-            x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
-            x86_64-apple-darwin aarch64-apple-darwin
-            x86_64-pc-windows-msvc aarch64-pc-windows-msvc
-          )
           for target in "${targets[@]}"; do
             case "$target" in *windows*) archive="yanbao-$target.zip" ;; *) archive="yanbao-$target.tar.gz" ;; esac
             (cd dist && sha256sum --check "yanbao-$target.sha256")
@@ -719,13 +788,6 @@ jobs:
                and .build.lock.sha256 == $lock_sha and .build.lock.target == $target
                and .build.lock.manifest_sha256 == $manifest_sha' \
               "dist/yanbao-$target.build.json" >/dev/null
-            gh attestation verify "dist/$archive" --repo "$GITHUB_REPOSITORY" \
-              --signer-repo "$GITHUB_REPOSITORY" --bundle "$provenance" \
-              --source-digest "$COMMIT_SHA" >/dev/null
-            gh attestation verify "dist/$archive" --repo "$GITHUB_REPOSITORY" \
-              --signer-repo "$GITHUB_REPOSITORY" --bundle "$sbom_attestation" \
-              --predicate-type "https://cyclonedx.org/bom" \
-              --source-digest "$COMMIT_SHA" >/dev/null
           done
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --draft=false --prerelease=false --latest --verify-tag
