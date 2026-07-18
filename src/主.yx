@@ -596,12 +596,13 @@
     终
     逐 项目 于 评估【「items」】则
         定 发现 为 项目【「finding」】；定 正文 为 项目【「severity」】加「 」加 发现【「code」】加「 」加 发现【「package」】加「：」加 发现【「message」】；
+        定 位置 为 审计.发现位置（发现）；
         若 项目【「suppressed」】则
             定 抑制 为 项目【「suppression」】；
-            输出.诊断（发现【「code」】，「suppressed」，正文，「」，空，「抑制原因：」加 抑制【「reason」】加「；到期：」加 抑制【「expires」】，空）；
+            输出.诊断（发现【「code」】，「suppressed」，正文，位置【「file」】，位置【「range」】，「抑制原因：」加 抑制【「reason」】加「；到期：」加 抑制【「expires」】，空）；
             输出.变更（「audit_suppressed」，项目根，「」，{「code」：发现【「code」】，「reason」：抑制【「reason」】，「expires」：抑制【「expires」】}）；
         否则
-            输出.诊断（发现【「code」】，项目【「severity」】，正文，「」，空，审计.修复建议（发现【「code」】），空）；
+            输出.诊断（发现【「code」】，项目【「severity」】，正文，位置【「file」】，位置【「range」】，审计.修复建议（发现【「code」】），空）；
         终
     终
     定 摘要 为 {「deny_level」：评估【「deny_level」】，「findings」：长度（评估【「items」】），「denied」：评估【「denied_count」】，「suppressed」：评估【「suppressed_count」】，「expired_suppressions」：长度（评估【「expired_suppressions」】），「severity_counts」：评估【「severity_counts」】}；

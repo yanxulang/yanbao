@@ -35,6 +35,20 @@
 测试.相等（审计.规范严重度（「low」），「low」）；
 测试.相等（审计.规范严重度（「information」），「info」）；
 
+定 带位置发现 为 发现（「AUDIT_LOCK_INVALID」，「high」）；
+置 带位置发现【「path」】为「/tmp/示例/言序.lock」；
+置 带位置发现【「line」】为 7；
+置 带位置发现【「future_field」】为 {「保留」：真}；
+定 位置 为 审计.发现位置（带位置发现）；
+测试.相等（位置【「file」】，「/tmp/示例/言序.lock」）；
+测试.相等（位置【「range」】【「start」】【「line」】，7）；
+测试.相等（位置【「range」】【「start」】【「column」】，1）；
+测试.相等（位置【「range」】【「end」】【「line」】，7）；
+测试.断言（审计.验证发现（带位置发现）【「future_field」】【「保留」】，「未知可选字段应前向兼容」）；
+定 无位置 为 审计.发现位置（发现（「AUDIT_LOCK_MISSING」，「high」））；
+测试.相等（无位置【「file」】，「」）；
+测试.相等（无位置【「range」】，空）；
+
 定 五级发现 为【
     发现（「AUDIT_CRITICAL」，「critical」），发现（「AUDIT_HIGH」，「high」），
     发现（「AUDIT_MEDIUM」，「warning」），发现（「AUDIT_LOW」，「low」），
@@ -94,6 +108,10 @@
 法 小写代码（）：数 则 审计.评估（【发现（「audit_bad」，「high」）】，【】，「2026-07-18」）；归 0；终
 法 含路径代码（）：数 则 审计.评估（【发现（「AUDIT/BAD」，「high」）】，【】，「2026-07-18」）；归 0；终
 法 非法抑制代码（）：数 则 审计.解析抑制（「audit_bad@2026-08-01@无效代码」，「2026-07-18」）；归 0；终
+法 空发现路径（）：数 则 定 项目 为 发现（「AUDIT_LOCK_INVALID」，「high」）；置 项目【「path」】为「」；审计.验证发现（项目）；归 0；终
+法 非文字发现路径（）：数 则 定 项目 为 发现（「AUDIT_LOCK_INVALID」，「high」）；置 项目【「path」】为 1；审计.验证发现（项目）；归 0；终
+法 缺路径行号（）：数 则 定 项目 为 发现（「AUDIT_LOCK_INVALID」，「high」）；置 项目【「line」】为 1；审计.验证发现（项目）；归 0；终
+法 非法发现行号（）：数 则 定 项目 为 发现（「AUDIT_LOCK_INVALID」，「high」）；置 项目【「path」】为「言序.lock」；置 项目【「line」】为 1.5；审计.验证发现（项目）；归 0；终
 应失败（无效级别，「AUDIT_CONFIG」）；
 应失败（冲突级别，「AUDIT_CONFIG」）；
 应失败（缺少原因，「AUDIT_CONFIG」）；
@@ -107,3 +125,7 @@
 应失败（小写代码，「AUDIT_SCHEMA」）；
 应失败（含路径代码，「AUDIT_SCHEMA」）；
 应失败（非法抑制代码，「AUDIT_CONFIG」）；
+应失败（空发现路径，「AUDIT_SCHEMA」）；
+应失败（非文字发现路径，「AUDIT_SCHEMA」）；
+应失败（缺路径行号，「AUDIT_SCHEMA」）；
+应失败（非法发现行号，「AUDIT_SCHEMA」）；
