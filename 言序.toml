@@ -11,7 +11,7 @@
 
 [权限]
 文件 = ["."]
-环境 = ["YANXU_BIN", "YANBAO_TIMEOUT"]
+环境 = ["YANXU_BIN", "YANBAO_TIMEOUT", "YANBAO_FAULT_INJECTION"]
 进程 = true
 网络 = []
 TCP监听 = []
