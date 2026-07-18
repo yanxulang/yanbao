@@ -4,6 +4,7 @@ set -eu
 REPOSITORY="${YANBAO_REPOSITORY:-YanXuLang/yanbao}"
 VERSION="${YANBAO_VERSION:-latest}"
 INSTALL_DIR="${YANBAO_INSTALL_DIR:-$HOME/.local/bin}"
+ASSET_DIR="${YANBAO_ASSET_DIR:-}"
 
 say() { printf '%s\n' "$*"; }
 fail() { say "言包安装失败：$*" >&2; exit 1; }
@@ -19,9 +20,11 @@ download() {
   fi
 }
 
-need curl
 need tar
 need install
+if [ -z "$ASSET_DIR" ]; then
+  need curl
+fi
 YANXU_BIN="${YANXU_BIN:-yanxu}"
 command -v "$YANXU_BIN" >/dev/null 2>&1 || fail "需要先安装言序 1.1.17 或更高版本（yanxu），也可通过 YANXU_BIN 指定其路径"
 export YANXU_BIN
@@ -64,7 +67,9 @@ esac
 target="${arch}-${system}"
 asset="yanbao-${target}.tar.gz"
 checksum_asset="yanbao-${target}.sha256"
-if [ "$VERSION" = "latest" ]; then
+if [ -n "$ASSET_DIR" ] && [ "$VERSION" = "latest" ]; then
+  fail "使用 YANBAO_ASSET_DIR 时必须通过 YANBAO_VERSION 指定版本"
+elif [ "$VERSION" = "latest" ]; then
   release_json="$(download \
     --header "Accept: application/vnd.github+json" \
     --header "X-GitHub-Api-Version: 2022-11-28" \
@@ -78,6 +83,11 @@ else
 fi
 base_url="https://github.com/${REPOSITORY}/releases/download/${tag}"
 release_version="${tag#v}"
+if [ -n "$ASSET_DIR" ]; then
+  case "$ASSET_DIR" in /*) ;; *) fail "YANBAO_ASSET_DIR 必须是绝对路径" ;; esac
+  [ -d "$ASSET_DIR" ] || fail "YANBAO_ASSET_DIR 不是目录"
+  need cp
+fi
 
 tmp_dir="$(mktemp -d 2>/dev/null || mktemp -d -t yanbao)"
 stage_launcher=""
@@ -90,8 +100,21 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 say "正在安装言包 ${version_label}（${target}）…"
-download --output "$tmp_dir/$asset" "$base_url/$asset" || fail "未找到适用于 ${target} 的发行包"
-download --output "$tmp_dir/$checksum_asset" "$base_url/$checksum_asset" || fail "发行包缺少 SHA-256 校验文件"
+if [ -n "$ASSET_DIR" ]; then
+  [ -f "$ASSET_DIR/$asset" ] && [ -r "$ASSET_DIR/$asset" ] ||
+    fail "本地制品目录缺少可读的 $asset"
+  [ -f "$ASSET_DIR/$checksum_asset" ] && [ -r "$ASSET_DIR/$checksum_asset" ] ||
+    fail "本地制品目录缺少可读的 $checksum_asset"
+  cp "$ASSET_DIR/$asset" "$tmp_dir/$asset" ||
+    fail "不能暂存本地发行包"
+  cp "$ASSET_DIR/$checksum_asset" "$tmp_dir/$checksum_asset" ||
+    fail "不能暂存本地校验文件"
+else
+  download --output "$tmp_dir/$asset" "$base_url/$asset" ||
+    fail "未找到适用于 ${target} 的发行包"
+  download --output "$tmp_dir/$checksum_asset" "$base_url/$checksum_asset" ||
+    fail "发行包缺少 SHA-256 校验文件"
+fi
 
 expected="$(awk '{print $1; exit}' "$tmp_dir/$checksum_asset")"
 case "$expected" in ''|*[!0-9A-Fa-f]*) fail "SHA-256 校验文件格式无效" ;; esac
@@ -105,6 +128,7 @@ else
   fail "系统没有 sha256sum 或 shasum，无法校验下载"
 fi
 [ "$expected" = "$actual" ] || fail "SHA-256 校验不一致"
+unset YANBAO_GITHUB_TOKEN YANBAO_ASSET_DIR
 
 expanded="$tmp_dir/expanded"
 mkdir -p "$expanded"

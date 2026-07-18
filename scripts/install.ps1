@@ -45,6 +45,10 @@ function Invoke-Utf8Process([string]$Path, [string]$Arguments) {
 $Repository = if ($env:YANBAO_REPOSITORY) { $env:YANBAO_REPOSITORY } else { "YanXuLang/yanbao" }
 $Version = if ($env:YANBAO_VERSION) { $env:YANBAO_VERSION } else { "latest" }
 $InstallDir = if ($env:YANBAO_INSTALL_DIR) { $env:YANBAO_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "Programs\Yanbao\bin" }
+$AssetDir = if ($env:YANBAO_ASSET_DIR) { [System.IO.Path]::GetFullPath($env:YANBAO_ASSET_DIR) } else { $null }
+if ($AssetDir -and -not [System.IO.Directory]::Exists($AssetDir)) {
+    throw "Yanbao installation failed: YANBAO_ASSET_DIR is not a directory"
+}
 $Yanxu = if ($env:YANXU_BIN) { $env:YANXU_BIN } else { "yanxu" }
 if (-not (Get-Command $Yanxu -ErrorAction SilentlyContinue)) {
     throw "Yanbao installation failed: Yanxu 1.1.17 or newer is required; install yanxu or set YANXU_BIN"
@@ -88,7 +92,9 @@ $Headers = @{}
 if ($env:YANBAO_GITHUB_TOKEN) { $Headers.Authorization = "Bearer $($env:YANBAO_GITHUB_TOKEN)" }
 $Asset = "yanbao-$Target.zip"
 $ChecksumAsset = "yanbao-$Target.sha256"
-if ($Version -eq "latest") {
+if ($AssetDir -and $Version -eq "latest") {
+    throw "Yanbao installation failed: YANBAO_VERSION is required when YANBAO_ASSET_DIR is set"
+} elseif ($Version -eq "latest") {
     try {
         $ApiHeaders = @{
             Accept = "application/vnd.github+json"
@@ -117,14 +123,29 @@ try {
     Write-Host "Installing Yanbao $VersionLabel ($Target)..."
     $ArchivePath = Join-Path $TempDir $Asset
     $ChecksumPath = Join-Path $TempDir $ChecksumAsset
-    Invoke-WebRequest -UseBasicParsing -Headers $Headers -Uri "$BaseUrl/$Asset" -OutFile $ArchivePath
-    Invoke-WebRequest -UseBasicParsing -Headers $Headers -Uri "$BaseUrl/$ChecksumAsset" -OutFile $ChecksumPath
+    if ($AssetDir) {
+        $LocalArchive = Join-Path $AssetDir $Asset
+        $LocalChecksum = Join-Path $AssetDir $ChecksumAsset
+        if (-not [System.IO.File]::Exists($LocalArchive)) {
+            throw "local asset directory is missing $Asset"
+        }
+        if (-not [System.IO.File]::Exists($LocalChecksum)) {
+            throw "local asset directory is missing $ChecksumAsset"
+        }
+        Copy-Item -LiteralPath $LocalArchive -Destination $ArchivePath
+        Copy-Item -LiteralPath $LocalChecksum -Destination $ChecksumPath
+    } else {
+        Invoke-WebRequest -UseBasicParsing -Headers $Headers -Uri "$BaseUrl/$Asset" -OutFile $ArchivePath
+        Invoke-WebRequest -UseBasicParsing -Headers $Headers -Uri "$BaseUrl/$ChecksumAsset" -OutFile $ChecksumPath
+    }
 
     $Expected = ((Get-Content $ChecksumPath -Raw).Trim() -split "\s+")[0]
     if ($Expected -notmatch "^[0-9A-Fa-f]{64}$") { throw "invalid SHA-256 checksum file" }
     $Expected = $Expected.ToLowerInvariant()
     $Actual = Get-Sha256 $ArchivePath
     if ($Expected -ne $Actual) { throw "SHA-256 checksum mismatch" }
+    Remove-Item Env:YANBAO_GITHUB_TOKEN -ErrorAction SilentlyContinue
+    Remove-Item Env:YANBAO_ASSET_DIR -ErrorAction SilentlyContinue
 
     $Expanded = Join-Path $TempDir "expanded"
     Expand-Archive -Path $ArchivePath -DestinationPath $Expanded
