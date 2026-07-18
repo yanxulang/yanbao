@@ -1,6 +1,6 @@
 # 参与言包
 
-言包 0.2 的业务实现必须使用言序语言。不得重新加入 Cargo 工程、Rust 命令分派器或另一套清单/锁解析器。
+言包的业务实现必须使用言序语言。不得重新加入 Cargo 工程、Rust 命令分派器或另一套清单/锁解析器。
 
 ## 本地验证
 
@@ -15,6 +15,9 @@ YANXU_BIN=yanxu ./yanbao --version
 compile_source="$(mktemp -d)"
 cp src/*.yx "$compile_source/"
 yanxu compile "$compile_source/主.yx" -o build/yanbao --release --standalone
+sh scripts/generate-sbom.sh build/yanbao-first.cdx.json
+sh scripts/generate-sbom.sh build/yanbao-second.cdx.json
+cmp build/yanbao-first.cdx.json build/yanbao-second.cdx.json
 rm -rf "$compile_source"
 ```
 

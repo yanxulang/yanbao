@@ -28,7 +28,7 @@ on:
         type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
@@ -44,6 +44,7 @@ jobs:
     outputs:
       version: ${{ steps.metadata.outputs.version }}
       yanxu_version: ${{ steps.metadata.outputs.yanxu_version }}
+      commit: ${{ steps.metadata.outputs.commit }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -67,8 +68,11 @@ jobs:
           git fetch origin main --no-tags
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
           test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$(git rev-parse HEAD)"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "yanxu_version=$yanxu_version" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$version"
+            echo "yanxu_version=$yanxu_version"
+            echo "commit=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
 
   quality:
     name: 标签提交完整质量门禁
@@ -215,6 +219,25 @@ jobs:
           Compress-Archive -Path (Join-Path $Stage "*") -DestinationPath $Archive
           $ChecksumPath = Join-Path $Dist "yanbao-$env:TARGET.sha256"
           & "scripts\write-sha256.ps1" -InputPath $Archive -OutputPath $ChecksumPath -AssetName $Asset
+      - name: 生成目标构建元数据
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+          YANBAO_SOURCE_REF: refs/tags/${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          case "$TARGET" in
+            *windows*)
+              archive="dist/yanbao-$TARGET.zip"
+              application="$RUNNER_TEMP/yanbao-$TARGET/yanbao-app.exe"
+              ;;
+            *)
+              archive="dist/yanbao-$TARGET.tar.gz"
+              application="$RUNNER_TEMP/yanbao-$TARGET/yanbao-app"
+              ;;
+          esac
+          sh scripts/generate-build-metadata.sh \
+            "$TARGET" "$archive" "$application" "dist/yanbao-$TARGET.build.json"
       - name: 上传平台制品
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -223,11 +246,84 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  supply-chain:
+    name: SBOM 与构建证明
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: yanbao-*
+          path: dist
+          merge-multiple: true
+      - name: 汇总目标制品并生成 SBOM
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          YANBAO_SOURCE_REF: refs/tags/${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 18
+          test "$(find dist -maxdepth 1 -name '*.build.json' -type f | wc -l)" -eq 6
+          sh scripts/generate-sbom.sh "dist/yanbao-$VERSION.cdx.json"
+      - name: 创建构建来源证明
+        if: ${{ !inputs.build_only }}
+        id: provenance
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/*.sha256
+            dist/*.build.json
+            dist/*.cdx.json
+      - name: 创建 SBOM 证明
+        if: ${{ !inputs.build_only }}
+        id: sbom
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+          sbom-path: dist/yanbao-${{ needs.validate.outputs.version }}.cdx.json
+      - name: 准备可下载证明
+        if: ${{ !inputs.build_only }}
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+          SBOM_BUNDLE: ${{ steps.sbom.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          cp "$PROVENANCE_BUNDLE" "dist/yanbao-$VERSION.provenance.jsonl"
+          cp "$SBOM_BUNDLE" "dist/yanbao-$VERSION.sbom-attestation.jsonl"
+          test -s "dist/yanbao-$VERSION.provenance.jsonl"
+          test -s "dist/yanbao-$VERSION.sbom-attestation.jsonl"
+      - name: 上传供应链制品
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: yanbao-supply-chain
+          path: |
+            dist/*.cdx.json
+            dist/*.jsonl
+          if-no-files-found: error
+          retention-days: 7
+
   publish:
     name: 上传并暂存 Release 草稿
     if: ${{ !inputs.build_only }}
-    needs: [validate, build]
+    needs: [validate, build, supply-chain]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      attestations: read
     outputs:
       url: ${{ steps.release.outputs.url }}
     steps:
@@ -240,6 +336,11 @@ jobs:
           path: dist
           merge-multiple: true
       - name: 校验全部发行资产
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          YANXU_VERSION: ${{ needs.validate.outputs.yanxu_version }}
+          COMMIT_SHA: ${{ needs.validate.outputs.commit }}
+          REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
@@ -248,9 +349,38 @@ jobs:
             x86_64-apple-darwin aarch64-apple-darwin
             x86_64-pc-windows-msvc aarch64-pc-windows-msvc
           )
-          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 12
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 21
           command -v sha256sum >/dev/null
           command -v shasum >/dev/null
+          manifest_sha="$(sha256sum 言序.toml | awk '{print $1}')"
+          lock_sha="$(sha256sum 言序.lock | awk '{print $1}')"
+          sbom="dist/yanbao-$VERSION.cdx.json"
+          provenance="dist/yanbao-$VERSION.provenance.jsonl"
+          sbom_attestation="dist/yanbao-$VERSION.sbom-attestation.jsonl"
+          test -s "$sbom"
+          test -s "$provenance"
+          test -s "$sbom_attestation"
+          jq -e \
+            --arg version "$VERSION" \
+            --arg minimum "$YANXU_VERSION" \
+            --arg commit "$COMMIT_SHA" \
+            --arg manifest_sha "$manifest_sha" \
+            --arg lock_sha "$lock_sha" \
+            '.bomFormat == "CycloneDX" and .specVersion == "1.5"
+             and .metadata.component.version == $version
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:source:commit" and .value == $commit)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:manifest:sha256" and .value == $manifest_sha)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:lock:sha256" and .value == $lock_sha)] | length) == 1
+             and ([.components[] |
+               select(.name == "yanxu" and .version == $minimum and .scope == "required")] | length) == 1' \
+            "$sbom" >/dev/null
+          if grep -F "$GITHUB_WORKSPACE" "$sbom" >/dev/null; then
+            echo "SBOM 不得包含构建机绝对路径" >&2
+            exit 1
+          fi
           for target in "${targets[@]}"; do
             case "$target" in *windows*) archive="yanbao-$target.zip" ;; *) archive="yanbao-$target.tar.gz" ;; esac
             test -f "dist/$archive"
@@ -271,6 +401,34 @@ jobs:
               echo "$archive 不得包含言序运行时" >&2
               exit 1
             fi
+            archive_sha="$(sha256sum "dist/$archive" | awk '{print $1}')"
+            metadata="dist/yanbao-$target.build.json"
+            test -s "$metadata"
+            jq -e \
+              --arg version "$VERSION" \
+              --arg minimum "$YANXU_VERSION" \
+              --arg commit "$COMMIT_SHA" \
+              --arg ref "refs/tags/$RELEASE_TAG" \
+              --arg target "$target" \
+              --arg archive "$archive" \
+              --arg archive_sha "$archive_sha" \
+              --arg manifest_sha "$manifest_sha" \
+              --arg lock_sha "$lock_sha" \
+              '.schema_version == 1 and .version == $version
+               and .minimum_yanxu_version == $minimum
+               and .source.commit_sha == $commit and .source.ref == $ref
+               and .artifact.name == $archive and .artifact.sha256 == $archive_sha
+               and .build.target == $target and .build.profile == "release"
+               and .build.standalone and (.build.separate_runtime_bundled | not)
+               and .build.compiler.version == $minimum
+               and .build.compiler.target == $target and .build.compiler.mode == "release"
+               and .build.manifest.sha256 == $manifest_sha
+               and .build.lock.sha256 == $lock_sha
+               and .application.version_info.version == $version
+               and .application.version_info.yanxu_version == $minimum' \
+              "$metadata" >/dev/null
+            gh attestation verify "dist/$archive" --repo "$REPOSITORY" \
+              --bundle "$provenance" --source-digest "$COMMIT_SHA" >/dev/null
           done
       - name: 生成发行说明
         env:
@@ -323,10 +481,12 @@ jobs:
           echo "url=$(gh release view "$RELEASE_TAG" --json url --jq .url)" >> "$GITHUB_OUTPUT"
 
   publicize:
-    name: 六平台制品完成后公开 Release
+    name: 完整制品上传后公开 Release
     if: ${{ !inputs.build_only }}
-    needs: [validate, build, publish]
+    needs: [validate, build, supply-chain, publish]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: 公开已经完整上传的草稿
         env:
@@ -334,7 +494,7 @@ jobs:
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --draft=false --prerelease=false --latest --verify-tag \
+            --draft=false --prerelease=false --latest=false --verify-tag \
             --title "言包 $VERSION"
 
   smoke:
@@ -408,28 +568,98 @@ jobs:
 
   finalize:
     name: 确认正式发行
-    needs: [publicize, smoke]
+    needs: [validate, publicize, smoke]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      attestations: read
     steps:
-      - name: 确认 Release 可见且为 latest
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: 复验公开资产并设置 latest
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          YANXU_VERSION: ${{ needs.validate.outputs.yanxu_version }}
+          COMMIT_SHA: ${{ needs.validate.outputs.commit }}
         run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir dist
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq 21
+          manifest_sha="$(sha256sum 言序.toml | awk '{print $1}')"
+          lock_sha="$(sha256sum 言序.lock | awk '{print $1}')"
+          sbom="dist/yanbao-$VERSION.cdx.json"
+          provenance="dist/yanbao-$VERSION.provenance.jsonl"
+          sbom_attestation="dist/yanbao-$VERSION.sbom-attestation.jsonl"
+          test -s "$sbom"
+          test -s "$provenance"
+          test -s "$sbom_attestation"
+          jq -e \
+            --arg version "$VERSION" \
+            --arg minimum "$YANXU_VERSION" \
+            --arg commit "$COMMIT_SHA" \
+            --arg manifest_sha "$manifest_sha" \
+            --arg lock_sha "$lock_sha" \
+            '.bomFormat == "CycloneDX" and .specVersion == "1.5"
+             and .metadata.component.version == $version
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:source:commit" and .value == $commit)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:manifest:sha256" and .value == $manifest_sha)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:lock:sha256" and .value == $lock_sha)] | length) == 1
+             and ([.components[] |
+               select(.name == "yanxu" and .version == $minimum and .scope == "required")] | length) == 1' \
+            "$sbom" >/dev/null
+          targets=(
+            x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+            x86_64-apple-darwin aarch64-apple-darwin
+            x86_64-pc-windows-msvc aarch64-pc-windows-msvc
+          )
+          for target in "${targets[@]}"; do
+            case "$target" in *windows*) archive="yanbao-$target.zip" ;; *) archive="yanbao-$target.tar.gz" ;; esac
+            (cd dist && sha256sum --check "yanbao-$target.sha256")
+            (cd dist && shasum -a 256 --check "yanbao-$target.sha256")
+            archive_sha="$(sha256sum "dist/$archive" | awk '{print $1}')"
+            jq -e \
+              --arg version "$VERSION" \
+              --arg minimum "$YANXU_VERSION" \
+              --arg commit "$COMMIT_SHA" \
+              --arg target "$target" \
+              --arg archive "$archive" \
+              --arg archive_sha "$archive_sha" \
+              --arg manifest_sha "$manifest_sha" \
+              --arg lock_sha "$lock_sha" \
+              '.version == $version and .minimum_yanxu_version == $minimum
+               and .source.commit_sha == $commit
+               and .artifact.name == $archive and .artifact.sha256 == $archive_sha
+               and .build.target == $target and .build.compiler.target == $target
+               and .build.manifest.sha256 == $manifest_sha
+               and .build.lock.sha256 == $lock_sha' \
+              "dist/yanbao-$target.build.json" >/dev/null
+            gh attestation verify "dist/$archive" --repo "$GITHUB_REPOSITORY" \
+              --bundle "$provenance" --source-digest "$COMMIT_SHA" >/dev/null
+          done
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --draft=false --prerelease=false --latest --verify-tag
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --json url,isDraft,isPrerelease,assets
+            --json isDraft,isPrerelease,assets \
+            --jq 'select(.isDraft == false and .isPrerelease == false and (.assets | length) == 21)' >/dev/null
 
   quarantine:
-    name: 隔离冒烟失败的发行版
-    if: ${{ always() && needs.publicize.result == 'success' && needs.smoke.result != 'success' }}
-    needs: [publicize, smoke]
+    name: 隔离验收失败的发行版
+    if: ${{ always() && needs.publicize.result == 'success' && (needs.smoke.result != 'success' || needs.finalize.result != 'success') }}
+    needs: [publicize, smoke, finalize]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: 转为草稿并使工作流失败
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=true
-          echo "安装冒烟未通过，Release 已转回草稿。" >&2
+          echo "发布后验收未通过，Release 已转回草稿。" >&2
           exit 1
