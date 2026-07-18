@@ -304,6 +304,12 @@ jobs:
       - name: 核对版本、能力与言包规格
         shell: bash
         run: sh scripts/verify-toolchain.sh
+      - name: 检查源码并运行纯言序测试
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$YANXU_BIN" check src/主.yx
+          "$YANXU_BIN" test tests
       - name: 编译并验证独立应用
         shell: bash
         run: |
@@ -396,7 +402,7 @@ jobs:
           set -e
           test "$subprocess_failure_status" -eq 1
           printf '%s\n' "$subprocess_failure" | jq -e '
-            .diagnostics[0].code == "YANXU_PROTOCOL" and
+            .diagnostics[0].code == "YANXU_PROTOCOL_EMPTY" and
             .diagnostics[0].original_exit_code == 2
           ' >/dev/null
           if [[ "$RUNNER_OS" == "Windows" ]]; then

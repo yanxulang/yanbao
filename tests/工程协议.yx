@@ -1,5 +1,46 @@
 引「标准:测试」为 测试；
+引「标准:文字」为 文字；
 引「../src/核心.yx」为 核心；
+引「../src/输出.yx」为 输出；
+
+定 成功外壳 为 核心.分析工程响应（{
+    「protocol_version」：1，「ok」：真，「result」：{「value」：42}，
+    「future_field」：{「ignored」：真}
+}）；
+测试.相等（成功外壳【「kind」】，「success」）；
+测试.相等（成功外壳【「result」】【「value」】，42）；
+测试.相等（核心.分析工程正文（「  」）【「error」】【「code」】，「YANXU_PROTOCOL_EMPTY」）；
+测试.相等（核心.分析工程正文（「not-json」）【「error」】【「code」】，「YANXU_PROTOCOL_JSON_INVALID」）；
+测试.相等（核心.分析工程正文（「 {\"protocol_version\":1,\"ok\":true,\"result\":{\"value\":42}} 」）【「result」】【「value」】，42）；
+
+定 旧错误外壳 为 核心.分析工程响应（{
+    「protocol_version」：1，「ok」：假，
+    「error」：{「code」：「ENGINEERING_ERROR」，「message」：「旧核心错误」}
+}）；
+测试.相等（旧错误外壳【「kind」】，「engineering_error」）；
+测试.相等（旧错误外壳【「error」】【「code」】，「ENGINEERING_ERROR」）；
+测试.相等（旧错误外壳【「error」】【「file」】，「」）；
+测试.相等（旧错误外壳【「error」】【「range」】，空）；
+
+定 带位置错误外壳 为 核心.分析工程响应（{
+    「protocol_version」：1，「ok」：假，
+    「error」：{
+        「code」：「ENGINEERING_MANIFEST_INVALID」，「message」：「清单格式无效」，
+        「operation」：「inspect」，「path」：「/tmp/项目/言序.toml」，「line」：9，
+        「future_field」：「ignored」
+    }
+}）；
+测试.相等（带位置错误外壳【「error」】【「file」】，「/tmp/项目/言序.toml」）；
+测试.相等（带位置错误外壳【「error」】【「range」】【「start」】【「line」】，9）；
+测试.相等（带位置错误外壳【「error」】【「range」】【「end」】【「column」】，1）；
+
+测试.相等（核心.分析工程响应（【】）【「error」】【「code」】，「YANXU_PROTOCOL_SCHEMA_INVALID」）；
+测试.相等（核心.分析工程响应（{「protocol_version」：2，「ok」：真，「result」：{}}）【「error」】【「code」】，「YANXU_PROTOCOL_VERSION_UNSUPPORTED」）；
+测试.相等（核心.分析工程响应（{「protocol_version」：「1」，「ok」：真，「result」：{}}）【「error」】【「code」】，「YANXU_PROTOCOL_SCHEMA_INVALID」）；
+测试.相等（核心.分析工程响应（{「protocol_version」：1，「ok」：「true」，「result」：{}}）【「error」】【「code」】，「YANXU_PROTOCOL_SCHEMA_INVALID」）；
+测试.相等（核心.分析工程响应（{「protocol_version」：1，「ok」：真}）【「error」】【「code」】，「YANXU_PROTOCOL_SCHEMA_INVALID」）；
+测试.相等（核心.分析工程响应（{「protocol_version」：1，「ok」：假，「error」：{「code」：「BAD」，「message」：「坏代码」}}）【「error」】【「code」】，「YANXU_PROTOCOL_SCHEMA_INVALID」）；
+测试.相等（核心.分析工程响应（{「protocol_version」：1，「ok」：假，「error」：{「code」：「ENGINEERING_IO」，「message」：「错误」，「line」：1}}）【「error」】【「code」】，「YANXU_PROTOCOL_SCHEMA_INVALID」）；
 
 定 握手 为 核心.工程请求（{「operation」：「handshake」}）；
 测试.断言（长度（握手【「yanxu_version」】）大于 0，「工程握手应报告言序版本」）；
@@ -23,6 +64,23 @@
 测试.相等（核心.文字选项（【「--name」，「工程」】，「--name」，「默认」），「工程」）；
 测试.断言（非 核心.有参数（【「--」，「--offline」】，「--offline」），「不得读取透传旗标」）；
 测试.相等（核心.文字选项（【「--」，「--name」，「透传值」】，「--name」，「默认」），「默认」）；
+
+输出.配置（「protocol-test」，【「--message-format」，「json」】）；
+令 未知操作失败 为 假；
+试 则
+    核心.工程请求（{「operation」：「unsupported-operation」}）；
+救 错误 则
+    置 未知操作失败 为 真；
+    测试.断言（文字.始于（错误.消息，「[ENGINEERING_」），「有效核心错误须保留稳定代码」）；
+终
+测试.断言（未知操作失败，「未知工程操作必须失败」）；
+定 协议失败结果 为 输出.结果（假，1）；
+测试.相等（长度（协议失败结果【「diagnostics」】），1）；
+测试.断言（文字.始于（协议失败结果【「diagnostics」】【0】【「code」】，「ENGINEERING_」），「核心错误代码须进入结构化诊断」）；
+测试.相等（协议失败结果【「diagnostics」】【0】【「file」】，「」）；
+测试.相等（协议失败结果【「diagnostics」】【0】【「range」】，空）；
+测试.相等（协议失败结果【「diagnostics」】【0】【「original_exit_code」】，1）；
+
 定 短包 为 核心.GitHub依赖（「json」）；
 测试.相等（短包【「alias」】，「json」）；
 测试.相等（短包【「package」】，「yanxu-json」）；
