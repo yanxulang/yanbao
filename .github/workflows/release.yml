@@ -66,12 +66,16 @@ jobs:
           yanxu_version="${BASH_REMATCH[1]}"
           grep -Fqx "## $version" CHANGELOG.md
           git fetch origin main --no-tags
-          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-          test "$(git rev-list -n 1 "$RELEASE_TAG")" = "$(git rev-parse HEAD)"
+          tag_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
+          main_commit="$(git rev-parse origin/main)"
+          if ! git merge-base --is-ancestor "$tag_commit" "$main_commit"; then
+            echo "标签 $RELEASE_TAG 的提交 $tag_commit 不属于 origin/main 主线" >&2
+            exit 1
+          fi
           {
             echo "version=$version"
             echo "yanxu_version=$yanxu_version"
-            echo "commit=$(git rev-parse HEAD)"
+            echo "commit=$tag_commit"
           } >> "$GITHUB_OUTPUT"
 
   quality:
