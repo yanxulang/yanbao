@@ -31,7 +31,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref_name }}
+  group: yanbao-stable-release
   cancel-in-progress: false
 
 env:
@@ -557,34 +557,133 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" dist/* --clobber
-            gh release edit "$RELEASE_TAG" \
-              --title "言包 $VERSION" --notes-file release-notes.md \
-              --draft=true --prerelease=false --verify-tag
-          else
-            gh release create "$RELEASE_TAG" dist/* \
-              --title "言包 $VERSION" --notes-file release-notes.md \
-              --draft --prerelease=false --verify-tag
-          fi
-          echo "url=$(gh release view "$RELEASE_TAG" --json url --jq .url)" >> "$GITHUB_OUTPUT"
+          targets=(
+            x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+            x86_64-apple-darwin aarch64-apple-darwin
+            x86_64-pc-windows-msvc aarch64-pc-windows-msvc
+          )
+          expected_assets=(
+            "yanbao-$VERSION.cdx.json"
+            "yanbao-$VERSION.provenance.jsonl"
+            "yanbao-$VERSION.sbom-attestation.jsonl"
+          )
+          for target in "${targets[@]}"; do
+            case "$target" in
+              *windows*) archive="yanbao-$target.zip" ;;
+              *) archive="yanbao-$target.tar.gz" ;;
+            esac
+            expected_assets+=(
+              "$archive"
+              "yanbao-$target.sha256"
+              "yanbao-$target.build.json"
+              "yanbao-$target.lock"
+            )
+          done
+          test "${#expected_assets[@]}" -eq 27
+
+          # shellcheck disable=SC2016
+          state="$(gh api graphql \
+            -f owner="$GITHUB_REPOSITORY_OWNER" \
+            -f name="${GITHUB_REPOSITORY#*/}" \
+            -f tag="$RELEASE_TAG" \
+            -f query='query($owner: String!, $name: String!, $tag: String!) {
+              repository(owner: $owner, name: $name) {
+                release(tagName: $tag) { isDraft isPrerelease }
+              }
+            }' \
+            --jq '.data.repository.release |
+              if . == null then "missing"
+              elif .isDraft then "draft"
+              elif .isPrerelease then "prerelease"
+              else "stable" end')"
+          case "$state" in
+            missing)
+              gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                --title "言包 $VERSION" --notes-file release-notes.md \
+                --draft --latest=false --verify-tag
+              ;;
+            draft)
+              gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                --title "言包 $VERSION" --notes-file release-notes.md \
+                --draft=true --prerelease=false --latest=false --verify-tag
+              ;;
+            prerelease)
+              gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                --title "言包 $VERSION" --notes-file release-notes.md \
+                --draft=true --prerelease=false --latest=false --verify-tag
+              ;;
+            stable)
+              echo "稳定 Release $RELEASE_TAG 已存在，拒绝覆盖公开资产" >&2
+              exit 1
+              ;;
+            *) echo "未知 Release 状态：$state" >&2; exit 1 ;;
+          esac
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft --jq .isDraft)" = "true"
+
+          remote_assets="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name')"
+          while IFS= read -r remote_asset; do
+            [[ -z "$remote_asset" ]] && continue
+            keep=false
+            for expected in "${expected_assets[@]}"; do
+              if [[ "$remote_asset" == "$expected" ]]; then keep=true; break; fi
+            done
+            if [[ "$keep" == "false" ]]; then
+              gh release delete-asset "$RELEASE_TAG" "$remote_asset" \
+                --repo "$GITHUB_REPOSITORY" --yes
+            fi
+          done <<< "$remote_assets"
+          gh release upload "$RELEASE_TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" --clobber
+          expected_remote="$(printf '%s\n' "${expected_assets[@]}" | LC_ALL=C sort)"
+          actual_remote="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | LC_ALL=C sort)"
+          [[ "$actual_remote" == "$expected_remote" ]]
+
+          remote_dir="$RUNNER_TEMP/yanbao-uploaded"
+          mkdir -p "$remote_dir"
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir "$remote_dir"
+          test "$(find "$remote_dir" -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 27
+          for asset in "${expected_assets[@]}"; do
+            cmp "dist/$asset" "$remote_dir/$asset"
+          done
+          echo "url=$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json url --jq .url)" >> "$GITHUB_OUTPUT"
 
   publicize:
-    name: 完整制品上传后公开 Release
+    name: 完整制品上传后公开预发布
     if: ${{ !inputs.build_only }}
     needs: [validate, build, supply-chain, publish]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: 公开已经完整上传的草稿
+      - name: 公开已经完整上传的预发布
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --draft=false --prerelease=false --latest=false --verify-tag \
-            --title "言包 $VERSION"
+          set -euo pipefail
+          state="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,assets \
+            --jq 'if (.assets | length) != 27 then "invalid"
+                  elif .isDraft then "draft"
+                  elif .isPrerelease then "prerelease"
+                  else "stable" end')"
+          case "$state" in
+            draft)
+              gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                --draft=false --prerelease=true --latest=false --verify-tag \
+                --title "言包 $VERSION"
+              ;;
+            prerelease) ;;
+            stable) echo "Release 已稳定发布，拒绝重新进入预发布阶段" >&2; exit 1 ;;
+            *) echo "Release 资产集合不完整，拒绝公开" >&2; exit 1 ;;
+          esac
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,assets \
+            --jq '.isDraft == false and .isPrerelease == true and (.assets | length) == 27')" = "true"
 
   smoke:
     name: 安装冒烟 / ${{ matrix.os }}
@@ -789,24 +888,41 @@ jobs:
                and .build.lock.manifest_sha256 == $manifest_sha' \
               "dist/yanbao-$target.build.json" >/dev/null
           done
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --draft=false --prerelease=false --latest --verify-tag
-          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+          state="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --json isDraft,isPrerelease,assets \
-            --jq 'select(.isDraft == false and .isPrerelease == false and (.assets | length) == 27)' >/dev/null
+            --jq 'if .isDraft or (.assets | length) != 27 then "invalid"
+                  elif .isPrerelease then "prerelease" else "stable" end')"
+          case "$state" in
+            prerelease)
+              gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                --draft=false --prerelease=false --latest --verify-tag
+              test "$(gh release view --repo "$GITHUB_REPOSITORY" \
+                --json tagName --jq .tagName)" = "$RELEASE_TAG"
+              ;;
+            stable) ;;
+            *) echo "Release 状态或资产集合不满足正式发布条件" >&2; exit 1 ;;
+          esac
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,assets \
+            --jq '.isDraft == false and .isPrerelease == false and (.assets | length) == 27')" = "true"
 
   quarantine:
-    name: 隔离验收失败的发行版
+    name: 验收失败时保持预发布
     if: ${{ always() && needs.publicize.result == 'success' && (needs.smoke.result != 'success' || needs.finalize.result != 'success') }}
     needs: [publicize, smoke, finalize]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: 转为草稿并使工作流失败
+      - name: 保持预发布并使工作流失败
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=true
-          echo "发布后验收未通过，Release 已转回草稿。" >&2
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --draft=false --prerelease=true --latest=false
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,assets \
+            --jq '.isDraft == false and .isPrerelease == true and (.assets | length) == 27')" = "true"
+          echo "发布后验收未通过，Release 保持预发布状态。" >&2
           exit 1
