@@ -449,6 +449,10 @@ jobs:
             gh attestation verify "dist/$archive" --repo "$REPOSITORY" \
               --signer-repo "$REPOSITORY" --bundle "$provenance" \
               --source-digest "$COMMIT_SHA" >/dev/null
+            gh attestation verify "dist/$archive" --repo "$REPOSITORY" \
+              --signer-repo "$REPOSITORY" --bundle "$sbom_attestation" \
+              --predicate-type "https://cyclonedx.org/bom" \
+              --source-digest "$COMMIT_SHA" >/dev/null
           done
       - name: 生成发行说明
         env:
@@ -680,6 +684,10 @@ jobs:
               "dist/yanbao-$target.build.json" >/dev/null
             gh attestation verify "dist/$archive" --repo "$GITHUB_REPOSITORY" \
               --signer-repo "$GITHUB_REPOSITORY" --bundle "$provenance" \
+              --source-digest "$COMMIT_SHA" >/dev/null
+            gh attestation verify "dist/$archive" --repo "$GITHUB_REPOSITORY" \
+              --signer-repo "$GITHUB_REPOSITORY" --bundle "$sbom_attestation" \
+              --predicate-type "https://cyclonedx.org/bom" \
               --source-digest "$COMMIT_SHA" >/dev/null
           done
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
