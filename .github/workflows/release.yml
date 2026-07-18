@@ -447,7 +447,8 @@ jobs:
                and .application.version_info.yanxu_version == $minimum' \
               "$metadata" >/dev/null
             gh attestation verify "dist/$archive" --repo "$REPOSITORY" \
-              --bundle "$provenance" --source-digest "$COMMIT_SHA" >/dev/null
+              --signer-repo "$REPOSITORY" --bundle "$provenance" \
+              --source-digest "$COMMIT_SHA" >/dev/null
           done
       - name: 生成发行说明
         env:
@@ -678,7 +679,8 @@ jobs:
                and .build.lock.sha256 == $lock_sha' \
               "dist/yanbao-$target.build.json" >/dev/null
             gh attestation verify "dist/$archive" --repo "$GITHUB_REPOSITORY" \
-              --bundle "$provenance" --source-digest "$COMMIT_SHA" >/dev/null
+              --signer-repo "$GITHUB_REPOSITORY" --bundle "$provenance" \
+              --source-digest "$COMMIT_SHA" >/dev/null
           done
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --draft=false --prerelease=false --latest --verify-tag
