@@ -12,11 +12,11 @@
 
 依赖审计默认拒绝 critical/high。任何抑制都必须精确指定诊断代码、复核原因和 UTC 到期日；过期项不会继续掩盖发现。项目事务在覆盖前保留恢复信息，并在检测到并发修改或无效日志时拒绝写回。
 
-正式发行档案均配有单 LF 的 SHA-256 文件，并由两套校验工具复验。Release 同时提供 CycloneDX 1.5 SBOM、逐目标构建元数据、构建来源证明和 SBOM 证明；元数据绑定源码提交、目标、言序编译器、清单与锁文件摘要及独立应用摘要。发布流程在公开前验证证明，公开安装冒烟通过后再次下载并核对全部资产；任何一步失败都会撤销该发行版的稳定资格。请在公开披露前为修复预留合理时间。
+正式发行档案均配有单 LF 的 SHA-256 文件，并由两套校验工具复验。Release 同时提供 CycloneDX 1.5 SBOM、逐目标构建元数据、构建来源证明和 SBOM 证明；元数据绑定源码提交、目标、言序编译器、清单与锁文件摘要及独立应用摘要。发布流程在公开前验证证明，公开安装冒烟使用同一批已验签字节，正式化前任何一步失败都会保持预发布；已经稳定发布的 Release 不会被回退或覆盖。请在公开披露前为修复预留合理时间。
 
 ## 验证正式发行
 
-以下示例验证当前最新的 Linux x86-64 制品。需要 GitHub CLI、`jq`、`sha256sum`和`tar`；验证其他目标时替换`target`，Windows 归档扩展名改为`.zip`。
+以下示例验证当前最新的 Linux x86-64 制品。需要 GitHub CLI、`jq`和`sha256sum`，并按归档格式安装`tar`或`unzip`；验证其他目标时只需替换`target`，脚本会选择对应归档格式。
 
 ```sh
 set -eu
@@ -24,7 +24,10 @@ repo=YanXuLang/yanbao
 tag="$(gh release view --repo "$repo" --json tagName --jq .tagName)"
 version="${tag#v}"
 target=x86_64-unknown-linux-gnu
-archive="yanbao-$target.tar.gz"
+case "$target" in
+  *windows*) archive="yanbao-$target.zip" ;;
+  *) archive="yanbao-$target.tar.gz" ;;
+esac
 checksum="yanbao-$target.sha256"
 metadata="yanbao-$target.build.json"
 lockfile="yanbao-$target.lock"
@@ -97,8 +100,29 @@ jq -e --arg version "$version" --arg commit "$commit" \
      select(.name == "cdx:yanbao:source:commit" and .value == $commit)] | length) == 1' \
   "$sbom" >/dev/null
 
-if tar -tzf "$archive" | sed 's#^\./##; s#/$##; s#.*/##' | \
-  grep -Eq '^yanxu([.-]|$)'; then
+case "$archive" in
+  *.tar.gz)
+    archive_entries="$(tar -tzf "$archive")" || {
+      echo "不能读取言包 tar 归档目录" >&2
+      exit 1
+    }
+    ;;
+  *.zip)
+    archive_entries="$(unzip -Z1 "$archive")" || {
+      echo "不能读取言包 zip 归档目录" >&2
+      exit 1
+    }
+    ;;
+  *)
+    echo "不支持的言包归档格式：$archive" >&2
+    exit 1
+    ;;
+esac
+test -n "$archive_entries"
+if printf '%s\n' "$archive_entries" |
+  sed 's#^\./##; s#/$##; s#.*/##' |
+  grep -Eq '^yanxu([.-]|$)'
+then
   echo "言包发行档案不得捆绑言序运行时" >&2
   exit 1
 fi
