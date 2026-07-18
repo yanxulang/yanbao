@@ -649,6 +649,87 @@ jobs:
           ' "$transaction_root/new-recovered.json" >/dev/null
           test ! -e "$transaction_project/.yanxu/yanbao-transaction"
           test -z "$(find "$transaction_root" -maxdepth 1 -name '.yanbao-*' -print -quit)"
+      - name: 验证已校验本地发行包安装（Unix）
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          fixture="$RUNNER_TEMP/yanbao-local-install"
+          payload="$fixture/payload"
+          install_dir="$fixture/install"
+          rm -rf "$fixture"
+          mkdir -p "$payload" "$install_dir"
+          cp yanbao "$payload/yanbao"
+          cp "$RUNNER_TEMP/yanbao-app" "$payload/yanbao-app"
+          chmod 755 "$payload/yanbao" "$payload/yanbao-app"
+          archive="$fixture/yanbao-${{ matrix.target }}.tar.gz"
+          checksum="$fixture/yanbao-${{ matrix.target }}.sha256"
+          tar -C "$payload" -czf "$archive" yanbao yanbao-app
+          if command -v sha256sum >/dev/null 2>&1; then
+            digest="$(sha256sum "$archive" | awk '{print $1}')"
+          else
+            digest="$(shasum -a 256 "$archive" | awk '{print $1}')"
+          fi
+          printf '%s  %s\n' "$digest" "$(basename "$archive")" > "$checksum"
+          incomplete="$fixture/incomplete"
+          mkdir -p "$incomplete"
+          cp "$archive" "$incomplete/"
+          if YANBAO_ASSET_DIR="$incomplete" YANBAO_VERSION="$YANBAO_EXPECTED_VERSION" \
+            YANBAO_INSTALL_DIR="$install_dir" YANXU_BIN="$YANXU_BIN" \
+            sh scripts/install.sh >"$fixture/incomplete.log" 2>&1
+          then
+            echo "本地安装输入缺少校验文件时必须失败" >&2
+            exit 1
+          fi
+          no_network="$fixture/no-network"
+          mkdir -p "$no_network"
+          ln -s "$(command -v false)" "$no_network/curl"
+          YANBAO_ASSET_DIR="$fixture" \
+            YANBAO_GITHUB_TOKEN="installation-test-token" \
+            YANBAO_VERSION="$YANBAO_EXPECTED_VERSION" \
+            YANBAO_INSTALL_DIR="$install_dir" YANXU_BIN="$YANXU_BIN" \
+            PATH="$no_network:$PATH" \
+            sh scripts/install.sh
+          output="$(YANXU_BIN="$YANXU_BIN" "$install_dir/yanbao" --version | tr -d '\r')"
+          expected="$(printf '言包 %s\n言序 %s' "$YANBAO_EXPECTED_VERSION" "$YANXU_EXPECTED_VERSION")"
+          test "$output" = "$expected"
+      - name: 验证已校验本地发行包安装（Windows）
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $Fixture = Join-Path $env:RUNNER_TEMP "yanbao-local-install"
+          $Payload = Join-Path $Fixture "payload"
+          $InstallDir = Join-Path $Fixture "install"
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $Fixture
+          New-Item -ItemType Directory -Force -Path $Payload, $InstallDir | Out-Null
+          Copy-Item yanbao.cmd, yanbao.ps1 -Destination $Payload
+          Copy-Item (Join-Path $env:RUNNER_TEMP "yanbao-app.exe") -Destination $Payload
+          $Archive = Join-Path $Fixture "yanbao-${{ matrix.target }}.zip"
+          $Checksum = Join-Path $Fixture "yanbao-${{ matrix.target }}.sha256"
+          Compress-Archive -Path (Join-Path $Payload "*") -DestinationPath $Archive
+          & "scripts\write-sha256.ps1" -InputPath $Archive -OutputPath $Checksum -AssetName ([System.IO.Path]::GetFileName($Archive))
+          $OriginalUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
+          try {
+            $env:YANBAO_ASSET_DIR = $Fixture
+            $env:YANBAO_GITHUB_TOKEN = "installation-test-token"
+            $env:YANBAO_VERSION = $env:YANBAO_EXPECTED_VERSION
+            $env:YANBAO_INSTALL_DIR = $InstallDir
+            & "scripts\install.ps1"
+            if ((Test-Path Env:YANBAO_GITHUB_TOKEN) -or
+                (Test-Path Env:YANBAO_ASSET_DIR)) {
+              throw "安装器不得把下载令牌或本地资产路径留给发行包进程"
+            }
+            $Output = @(& (Join-Path $InstallDir "yanbao.cmd") --version 2>&1)
+            if ($LASTEXITCODE -ne 0) { throw "本地发行包安装后不能运行" }
+            if ($Output -notcontains "言包 $env:YANBAO_EXPECTED_VERSION") { throw "言包版本不一致" }
+            if ($Output -notcontains "言序 $env:YANXU_EXPECTED_VERSION") { throw "言序工具链版本不一致" }
+          } finally {
+            [Environment]::SetEnvironmentVariable("Path", $OriginalUserPath, "User")
+            Remove-Item Env:YANBAO_ASSET_DIR -ErrorAction SilentlyContinue
+            Remove-Item Env:YANBAO_GITHUB_TOKEN -ErrorAction SilentlyContinue
+            Remove-Item Env:YANBAO_VERSION -ErrorAction SilentlyContinue
+            Remove-Item Env:YANBAO_INSTALL_DIR -ErrorAction SilentlyContinue
+          }
       - name: 端到端工程流程
         shell: bash
         run: |
