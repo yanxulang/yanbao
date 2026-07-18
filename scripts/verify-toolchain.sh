@@ -43,6 +43,7 @@ jq -e --arg version "$actual_version" '
   and ((.result.operations | index("handshake")) != null)
   and ((.result.operations | index("bundle")) != null)
   and ((.result.operations | index("vendor")) != null)
+  and ((.result.operations | index("audit")) != null)
 ' "$work/handshake.json" >/dev/null
 
 export YANXU_BIN
