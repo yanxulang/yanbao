@@ -182,6 +182,20 @@
     }；
 终
 
+公 法 言窗依赖请求（位置：文，图形路径：文）：典 则
+    定 请求 为 {
+        「operation」：「edit」，「path」：位置，「alias」：「言窗」，
+        「package」：「yanxu-gui」，「version」：「^1.0」，「development」：假
+    }；
+    若 图形路径 不等于「」则
+        置 请求【「source」】为「path」；置 请求【「source_value」】为 图形路径；
+    否则
+        置 请求【「source」】为「registry」；
+        置 请求【「source_value」】为「https://get.yanxu.dev/packages/v1」；
+    终
+    归 请求；
+终
+
 公 法 项目路径（参数列：列<文>）：文 则
     归 文字选项（参数列，「--manifest-path」，「.」）；
 终
