@@ -488,6 +488,31 @@ jobs:
           project="$RUNNER_TEMP/yanbao-gui-e2e"
           rm -rf "$project"
           ./yanbao new "$project" --name CI言窗 --gui --gui-path "$GITHUB_WORKSPACE/yanxu-gui" --force
+          inspect_request="$(jq -cn --arg path "$project" \
+            '{protocol_version: 1, operation: "inspect", path: $path}')"
+          "$YANXU_BIN" package protocol "$inspect_request" > "$RUNNER_TEMP/yanbao-gui-inspect.json"
+          jq -e '
+            .ok == true and
+            .result.dependencies["言窗"].package == "yanxu-gui" and
+            .result.dependencies["言窗"].source == "path" and
+            .result.dependencies["言窗"].version == "^1.0"
+          ' "$RUNNER_TEMP/yanbao-gui-inspect.json" >/dev/null
           ./yanbao check --manifest-path "$project"
           ./yanbao bundle --manifest-path "$project"
           test "$(find "$project/build" -name bundle-manifest.json -type f | wc -l)" -eq 1
+          if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
+            registry_project="$RUNNER_TEMP/yanbao-gui-registry-e2e"
+            rm -rf "$registry_project"
+            ./yanbao new "$registry_project" --name CI言窗索引 --gui --force
+            registry_request="$(jq -cn --arg path "$registry_project" \
+              '{protocol_version: 1, operation: "inspect", path: $path}')"
+            "$YANXU_BIN" package protocol "$registry_request" > "$RUNNER_TEMP/yanbao-gui-registry-inspect.json"
+            jq -e '
+              .ok == true and
+              .result.dependencies["言窗"].package == "yanxu-gui" and
+              .result.dependencies["言窗"].source == "registry" and
+              .result.dependencies["言窗"].source_value == "https://get.yanxu.dev/packages/v1" and
+              .result.dependencies["言窗"].version == "^1.0"
+            ' "$RUNNER_TEMP/yanbao-gui-registry-inspect.json" >/dev/null
+            ./yanbao check --manifest-path "$registry_project"
+          fi

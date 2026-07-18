@@ -32,3 +32,18 @@
 测试.相等（第三方【「alias」】，「tools」）；
 测试.相等（第三方【「package」】，「yanxu-tools」）；
 测试.相等（第三方【「url」】，「https://github.com/acme/yanxu-tools.git」）；
+
+定 注册表言窗 为 核心.言窗依赖请求（「暂存项目」，「」）；
+测试.相等（注册表言窗【「operation」】，「edit」）；
+测试.相等（注册表言窗【「path」】，「暂存项目」）；
+测试.相等（注册表言窗【「alias」】，「言窗」）；
+测试.相等（注册表言窗【「package」】，「yanxu-gui」）；
+测试.相等（注册表言窗【「version」】，「^1.0」）；
+测试.相等（注册表言窗【「source」】，「registry」）；
+测试.相等（注册表言窗【「source_value」】，「https://get.yanxu.dev/packages/v1」）；
+测试.断言（非 注册表言窗【「development」】，「言窗应写入普通依赖」）；
+
+定 本地言窗 为 核心.言窗依赖请求（「暂存项目」，「../yanxu-gui」）；
+测试.相等（本地言窗【「source」】，「path」）；
+测试.相等（本地言窗【「source_value」】，「../yanxu-gui」）；
+测试.相等（本地言窗【「version」】，「^1.0」）；
