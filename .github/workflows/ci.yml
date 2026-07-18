@@ -690,13 +690,30 @@ jobs:
           no_network="$fixture/no-network"
           mkdir -p "$no_network"
           ln -s "$(command -v false)" "$no_network/curl"
+          real_yanxu="$YANXU_BIN"
+          no_token_yanxu="$fixture/yanxu-no-token"
+          # shellcheck disable=SC2016
+          printf '%s\n' \
+            '#!/bin/sh' \
+            'set -eu' \
+            'if [ -n "${GH_TOKEN:-}" ] || [ -n "${GITHUB_TOKEN:-}" ] || [ -n "${YANBAO_GITHUB_TOKEN:-}" ] || [ -n "${YANXU_GITHUB_TOKEN:-}" ] || [ -n "${_yanbao_download_token:-}" ]; then' \
+            '  echo "安装子进程继承了下载令牌" >&2' \
+            '  exit 97' \
+            'fi' \
+            'exec "$YANBAO_TEST_REAL_YANXU" "$@"' \
+            > "$no_token_yanxu"
+          chmod 755 "$no_token_yanxu"
           YANBAO_ASSET_DIR="$fixture" \
+            GH_TOKEN="installation-test-gh-token" \
+            GITHUB_TOKEN="installation-test-github-token" \
             YANBAO_GITHUB_TOKEN="installation-test-token" \
+            YANXU_GITHUB_TOKEN="installation-test-yanxu-token" \
             YANBAO_VERSION="$YANBAO_EXPECTED_VERSION" \
-            YANBAO_INSTALL_DIR="$install_dir" YANXU_BIN="$YANXU_BIN" \
+            YANBAO_INSTALL_DIR="$install_dir" YANXU_BIN="$no_token_yanxu" \
+            YANBAO_TEST_REAL_YANXU="$real_yanxu" \
             PATH="$no_network:$PATH" \
-            sh scripts/install.sh
-          output="$(YANXU_BIN="$YANXU_BIN" "$install_dir/yanbao" --version | tr -d '\r')"
+            sh -a scripts/install.sh
+          output="$(YANXU_BIN="$real_yanxu" "$install_dir/yanbao" --version | tr -d '\r')"
           expected="$(printf '言包 %s\n言序 %s' "$YANBAO_EXPECTED_VERSION" "$YANXU_EXPECTED_VERSION")"
           test "$output" = "$expected"
       - name: 验证已校验本地发行包安装（Windows）
@@ -717,13 +734,24 @@ jobs:
           $OriginalUserPath = [Environment]::GetEnvironmentVariable("Path", "User")
           try {
             $env:YANBAO_ASSET_DIR = $Fixture
+            $env:GH_TOKEN = "installation-test-gh-token"
+            $env:GITHUB_TOKEN = "installation-test-github-token"
             $env:YANBAO_GITHUB_TOKEN = "installation-test-token"
+            $env:YANXU_GITHUB_TOKEN = "installation-test-yanxu-token"
             $env:YANBAO_VERSION = $env:YANBAO_EXPECTED_VERSION
             $env:YANBAO_INSTALL_DIR = $InstallDir
-            & "scripts\install.ps1"
-            if ((Test-Path Env:YANBAO_GITHUB_TOKEN) -or
+            Invoke-Expression ([System.IO.File]::ReadAllText((Resolve-Path "scripts\install.ps1")))
+            if ((Test-Path Env:GH_TOKEN) -or
+                (Test-Path Env:GITHUB_TOKEN) -or
+                (Test-Path Env:YANBAO_GITHUB_TOKEN) -or
+                (Test-Path Env:YANXU_GITHUB_TOKEN) -or
                 (Test-Path Env:YANBAO_ASSET_DIR)) {
               throw "安装器不得把下载令牌或本地资产路径留给发行包进程"
+            }
+            foreach ($Name in @("DownloadToken", "Headers", "ApiHeaders")) {
+              if (Get-Variable -Name $Name -Scope Local -ErrorAction SilentlyContinue) {
+                throw "安装器不得把下载凭据留在调用作用域"
+              }
             }
             $Output = @(& (Join-Path $InstallDir "yanbao.cmd") --version 2>&1)
             if ($LASTEXITCODE -ne 0) { throw "本地发行包安装后不能运行" }
@@ -732,7 +760,10 @@ jobs:
           } finally {
             [Environment]::SetEnvironmentVariable("Path", $OriginalUserPath, "User")
             Remove-Item Env:YANBAO_ASSET_DIR -ErrorAction SilentlyContinue
+            Remove-Item Env:GH_TOKEN -ErrorAction SilentlyContinue
+            Remove-Item Env:GITHUB_TOKEN -ErrorAction SilentlyContinue
             Remove-Item Env:YANBAO_GITHUB_TOKEN -ErrorAction SilentlyContinue
+            Remove-Item Env:YANXU_GITHUB_TOKEN -ErrorAction SilentlyContinue
             Remove-Item Env:YANBAO_VERSION -ErrorAction SilentlyContinue
             Remove-Item Env:YANBAO_INSTALL_DIR -ErrorAction SilentlyContinue
           }

@@ -1,19 +1,24 @@
 #!/bin/sh
 set -eu
+set +a
 
 REPOSITORY="${YANBAO_REPOSITORY:-YanXuLang/yanbao}"
 VERSION="${YANBAO_VERSION:-latest}"
 INSTALL_DIR="${YANBAO_INSTALL_DIR:-$HOME/.local/bin}"
 ASSET_DIR="${YANBAO_ASSET_DIR:-}"
+_yanbao_token_capture="${YANBAO_GITHUB_TOKEN:-}"
+unset GH_TOKEN GITHUB_TOKEN YANBAO_GITHUB_TOKEN YANXU_GITHUB_TOKEN _yanbao_download_token
+_yanbao_download_token="$_yanbao_token_capture"
+unset _yanbao_token_capture
 
 say() { printf '%s\n' "$*"; }
 fail() { say "言包安装失败：$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1 || fail "需要命令 $1"; }
 download() {
-  if [ -n "${YANBAO_GITHUB_TOKEN:-}" ]; then
+  if [ -n "$_yanbao_download_token" ]; then
     curl --disable --fail --location --silent --show-error \
       --proto '=https' --tlsv1.2 \
-      --header "Authorization: Bearer ${YANBAO_GITHUB_TOKEN}" "$@"
+      --header "Authorization: Bearer ${_yanbao_download_token}" "$@"
   else
     curl --disable --fail --location --silent --show-error \
       --proto '=https' --tlsv1.2 "$@"
@@ -128,7 +133,7 @@ else
   fail "系统没有 sha256sum 或 shasum，无法校验下载"
 fi
 [ "$expected" = "$actual" ] || fail "SHA-256 校验不一致"
-unset YANBAO_GITHUB_TOKEN YANBAO_ASSET_DIR
+unset _yanbao_download_token YANBAO_ASSET_DIR
 
 expanded="$tmp_dir/expanded"
 mkdir -p "$expanded"

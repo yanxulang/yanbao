@@ -1,3 +1,4 @@
+& {
 $ErrorActionPreference = "Stop"
 # Keep this script ASCII-only so Windows PowerShell 5.1 can run it both as a file and through irm | iex.
 
@@ -25,6 +26,9 @@ function Invoke-Utf8Process([string]$Path, [string]$Arguments) {
     $StartInfo.RedirectStandardError = $true
     $StartInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
     $StartInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+    foreach ($TokenName in @("GH_TOKEN", "GITHUB_TOKEN", "YANBAO_GITHUB_TOKEN", "YANXU_GITHUB_TOKEN")) {
+        [void]$StartInfo.EnvironmentVariables.Remove($TokenName)
+    }
 
     $Process = New-Object System.Diagnostics.Process
     $Process.StartInfo = $StartInfo
@@ -46,6 +50,10 @@ $Repository = if ($env:YANBAO_REPOSITORY) { $env:YANBAO_REPOSITORY } else { "Yan
 $Version = if ($env:YANBAO_VERSION) { $env:YANBAO_VERSION } else { "latest" }
 $InstallDir = if ($env:YANBAO_INSTALL_DIR) { $env:YANBAO_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "Programs\Yanbao\bin" }
 $AssetDir = if ($env:YANBAO_ASSET_DIR) { [System.IO.Path]::GetFullPath($env:YANBAO_ASSET_DIR) } else { $null }
+$DownloadToken = [string]$env:YANBAO_GITHUB_TOKEN
+foreach ($TokenName in @("GH_TOKEN", "GITHUB_TOKEN", "YANBAO_GITHUB_TOKEN", "YANXU_GITHUB_TOKEN")) {
+    Remove-Item "Env:$TokenName" -ErrorAction SilentlyContinue
+}
 if ($AssetDir -and -not [System.IO.Directory]::Exists($AssetDir)) {
     throw "Yanbao installation failed: YANBAO_ASSET_DIR is not a directory"
 }
@@ -89,7 +97,7 @@ switch ($Architecture) {
 }
 
 $Headers = @{}
-if ($env:YANBAO_GITHUB_TOKEN) { $Headers.Authorization = "Bearer $($env:YANBAO_GITHUB_TOKEN)" }
+if ($DownloadToken) { $Headers.Authorization = "Bearer $DownloadToken" }
 $Asset = "yanbao-$Target.zip"
 $ChecksumAsset = "yanbao-$Target.sha256"
 if ($AssetDir -and $Version -eq "latest") {
@@ -100,8 +108,12 @@ if ($AssetDir -and $Version -eq "latest") {
             Accept = "application/vnd.github+json"
             "X-GitHub-Api-Version" = "2022-11-28"
         }
-        if ($env:YANBAO_GITHUB_TOKEN) { $ApiHeaders.Authorization = "Bearer $($env:YANBAO_GITHUB_TOKEN)" }
-        $Release = Invoke-RestMethod -Headers $ApiHeaders -Uri "https://api.github.com/repos/$Repository/releases/latest"
+        if ($DownloadToken) { $ApiHeaders.Authorization = "Bearer $DownloadToken" }
+        try {
+            $Release = Invoke-RestMethod -Headers $ApiHeaders -Uri "https://api.github.com/repos/$Repository/releases/latest"
+        } finally {
+            $ApiHeaders.Clear()
+        }
         if (-not $Release.tag_name) { throw "the repository has no installable release" }
         $Tag = $Release.tag_name
         $VersionLabel = "latest release $Tag"
@@ -144,7 +156,8 @@ try {
     $Expected = $Expected.ToLowerInvariant()
     $Actual = Get-Sha256 $ArchivePath
     if ($Expected -ne $Actual) { throw "SHA-256 checksum mismatch" }
-    Remove-Item Env:YANBAO_GITHUB_TOKEN -ErrorAction SilentlyContinue
+    $DownloadToken = $null
+    $Headers.Clear()
     Remove-Item Env:YANBAO_ASSET_DIR -ErrorAction SilentlyContinue
 
     $Expanded = Join-Path $TempDir "expanded"
@@ -188,4 +201,5 @@ try {
 } finally {
     foreach ($Path in $Staged) { Remove-Item -Force -ErrorAction SilentlyContinue $Path }
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $TempDir
+}
 }
