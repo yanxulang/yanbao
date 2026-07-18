@@ -48,6 +48,13 @@ fi
 
 commit_sha=$(git -C "$root" rev-parse HEAD)
 commit_timestamp=$(git -C "$root" show -s --format=%cI HEAD)
+serial_number=$(printf '%s\n' "$commit_sha" | sed -E \
+  's/^(.{8})(.{4}).(.{3}).(.{3})(.{12}).*$/urn:uuid:\1-\2-8\3-a\4-\5/')
+if ! printf '%s\n' "$serial_number" | grep -Eq \
+  '^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'; then
+  echo "不能从提交摘要生成 CycloneDX 序列号" >&2
+  exit 1
+fi
 manifest_sha=$(sha256_file "$manifest")
 lock_sha=$(sha256_file "$lockfile")
 source_ref=${YANBAO_SOURCE_REF:-${GITHUB_REF:-refs/tags/v$version}}
@@ -63,6 +70,7 @@ jq -S -n \
   --arg repository "$repository" \
   --arg source_ref "$source_ref" \
   --arg commit "$commit_sha" \
+  --arg serial_number "$serial_number" \
   --arg timestamp "$commit_timestamp" \
   --arg manifest_format "$manifest_format" \
   --arg manifest_sha "$manifest_sha" \
@@ -76,6 +84,7 @@ jq -S -n \
     "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
     bomFormat: "CycloneDX",
     specVersion: "1.5",
+    serialNumber: $serial_number,
     version: 1,
     metadata: {
       timestamp: $timestamp,
@@ -129,9 +138,11 @@ jq -e \
   --arg version "$version" \
   --arg minimum_yanxu "$minimum_yanxu" \
   --arg commit "$commit_sha" \
+  --arg serial_number "$serial_number" \
   --arg manifest_sha "$manifest_sha" \
   --arg lock_sha "$lock_sha" \
-  '.bomFormat == "CycloneDX" and .specVersion == "1.5" and .version == 1
+  '.bomFormat == "CycloneDX" and .specVersion == "1.5"
+   and .serialNumber == $serial_number and .version == 1
    and .metadata.component.name == "yanbao" and .metadata.component.version == $version
    and (.metadata.component.licenses == [{license: {id: "MIT"}}])
    and ([.metadata.component.properties[] |

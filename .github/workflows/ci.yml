@@ -101,6 +101,7 @@ jobs:
             --arg manifest_sha "$manifest_sha" \
             --arg lock_sha "$lock_sha" \
             '.bomFormat == "CycloneDX" and .specVersion == "1.5"
+             and (.serialNumber | test("^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
              and .metadata.component.version == $version
              and ([.metadata.component.properties[] |
                select(.name == "cdx:yanbao:source:commit" and .value == $commit)] | length) == 1
