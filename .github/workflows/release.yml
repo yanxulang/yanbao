@@ -1006,35 +1006,47 @@ jobs:
                   elif .isPrerelease then "prerelease" else "stable" end')"
           case "$state" in
             prerelease)
-              gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-                --draft=false --prerelease=false --latest --verify-tag
-              test "$(gh release view --repo "$GITHUB_REPOSITORY" \
-                --json tagName --jq .tagName)" = "$RELEASE_TAG"
               ;;
-            stable) ;;
+            stable)
+              echo "稳定 Release $RELEASE_TAG 已完整复验；保持现有 latest 状态。"
+              exit 0
+              ;;
             *) echo "Release 状态或资产集合不满足正式发布条件" >&2; exit 1 ;;
           esac
-          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --json isDraft,isPrerelease,assets \
-            --jq '.isDraft == false and .isPrerelease == false and (.assets | length) == 27')" = "true"
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --draft=false --prerelease=false --latest --verify-tag
 
   quarantine:
-    name: 验收失败时保持预发布
-    if: ${{ always() && needs.publicize.result == 'success' && (needs.smoke.result != 'success' || needs.finalize.result != 'success') }}
-    needs: [publicize, smoke, finalize]
+    name: 冒烟失败时复验预发布状态
+    if: ${{ always() && needs.publicize.result == 'success' && needs.smoke.result == 'failure' }}
+    needs: [publicize, smoke]
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
-      - name: 保持预发布并使工作流失败
+      - name: 只读复验发行状态并使工作流失败
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --draft=false --prerelease=true --latest=false
-          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+          state="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --json isDraft,isPrerelease,assets \
-            --jq '.isDraft == false and .isPrerelease == true and (.assets | length) == 27')" = "true"
-          echo "发布后验收未通过，Release 保持预发布状态。" >&2
+            --jq 'if (.assets | length) != 27 then "invalid"
+                  elif .isDraft then "draft"
+                  elif .isPrerelease then "prerelease"
+                  else "stable" end')"
+          case "$state" in
+            prerelease)
+              echo "安装冒烟未通过，Release 保持预发布状态。" >&2
+              ;;
+            stable)
+              echo "安装冒烟未通过，但 Release 已正式发布；拒绝回退或改变 latest。" >&2
+              ;;
+            draft)
+              echo "安装冒烟失败后 Release 意外回到草稿状态。" >&2
+              ;;
+            *)
+              echo "安装冒烟失败后 Release 资产集合不完整或状态无效。" >&2
+              ;;
+          esac
           exit 1
