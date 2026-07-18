@@ -50,7 +50,7 @@
     文件.创建目录（父目录（锁目录））；
     令 结果：典 为 {}；
     若 环境.系统（）等于「windows」则
-        置 结果 为 PowerShell（「param([string]$Path) New-Item -ItemType Directory -LiteralPath $Path -ErrorAction Stop | Out-Null」，【锁目录】）；
+        置 结果 为 PowerShell（「param([string]$Path) New-Item -ItemType Directory -Path $Path -ErrorAction Stop | Out-Null」，【锁目录】）；
     否则
         置 结果 为 进程.执行（「/bin/mkdir」，【「--」，锁目录】，环境.当前目录（），30000）；
     终
