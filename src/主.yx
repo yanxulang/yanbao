@@ -7,6 +7,7 @@
 引「命令行.yx」为 命令行；
 引「输出.yx」为 输出；
 引「事务.yx」为 事务；
+引「审计.yx」为 审计；
 
 法 帮助（）则
     输出.消息（「言包 0.5.1——完全使用言序编写的官方工程工具」）；
@@ -579,16 +580,32 @@
 终
 
 法 审计依赖（参数列：列<文>）则
-    输出.设置项目根（核心.项目路径（参数列））；输出.设置阶段（「audit」）；
+    定 项目根 为 核心.项目路径（参数列）；输出.设置项目根（项目根）；输出.设置阶段（「audit」）；
     定 结果 为 核心.工程请求（{
-        「operation」：「audit」，「path」：核心.项目路径（参数列），
+        「operation」：「audit」，「path」：项目根，
         「offline」：核心.有参数（参数列，「--offline」）
     }）；
-    逐 发现 于 结果【「findings」】则
-        输出.诊断（发现【「code」】，发现【「severity」】，发现【「severity」】加「 」加 发现【「code」】加「 」加 发现【「package」】加「：」加 发现【「message」】，「」，空，「」，空）；
+    定 评估 为 审计.评估（结果【「findings」】，参数列，审计.当前日期（））；
+    逐 过期 于 评估【「expired_suppressions」】则
+        输出.诊断（「AUDIT_SUPPRESSION_EXPIRED」，「medium」，「审计抑制已过期：」加 过期【「code」】加「（」加 过期【「expires」】加「）」，「」，空，「请删除抑制或经复核后设置新的到期日」，空）；
     终
-    若 结果【「warnings」】等于 0 则 输出.消息（「依赖审计通过」）；终
-    若 核心.有参数（参数列，「--deny-warnings」）且 非 结果【「ok」】则 抛「依赖审计存在警告」；终
+    逐 项目 于 评估【「items」】则
+        定 发现 为 项目【「finding」】；定 正文 为 项目【「severity」】加「 」加 发现【「code」】加「 」加 发现【「package」】加「：」加 发现【「message」】；
+        若 项目【「suppressed」】则
+            定 抑制 为 项目【「suppression」】；
+            输出.诊断（发现【「code」】，「suppressed」，正文，「」，空，「抑制原因：」加 抑制【「reason」】加「；到期：」加 抑制【「expires」】，空）；
+            输出.变更（「audit_suppressed」，项目根，「」，{「code」：发现【「code」】，「reason」：抑制【「reason」】，「expires」：抑制【「expires」】}）；
+        否则
+            输出.诊断（发现【「code」】，项目【「severity」】，正文，「」，空，「」，空）；
+        终
+    终
+    定 摘要 为 {「deny_level」：评估【「deny_level」】，「findings」：长度（评估【「items」】），「denied」：评估【「denied_count」】，「suppressed」：评估【「suppressed_count」】，「expired_suppressions」：长度（评估【「expired_suppressions」】），「severity_counts」：评估【「severity_counts」】}；
+    输出.变更（「audit_summary」，项目根，「依赖审计完成」，摘要）；
+    若 评估【「denied_count」】大于 0 则
+        输出.静默诊断（「AUDIT_DENIED」，「error」，「依赖审计被 」加 评估【「deny_level」】加「 级别门禁拒绝」，「」，空，「请修复发现，或在复核后使用带原因和到期日的精确抑制」，1）；
+        抛「[AUDIT_DENIED] 依赖审计未通过」；
+    终
+    若 长度（评估【「items」】）等于 0 则 输出.消息（「依赖审计通过」）；终
 终
 
 法 分派（命令：文，参数列：列<文>，工具链：典）则
