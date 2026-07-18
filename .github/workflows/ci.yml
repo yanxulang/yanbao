@@ -198,6 +198,7 @@ jobs:
           test ! -e Cargo.toml
           test -z "$(find src -name '*.rs' -print -quit)"
           sh -n yanbao scripts/install.sh scripts/verify-toolchain.sh
+          jq -e '."$id" == "https://yanxu.dev/schemas/yanbao-cli-output-v1.json"' schemas/yanbao-cli-output-v1.json >/dev/null
       - name: 检查纯言序实现与 Windows 脚本
         if: runner.os == 'Windows'
         shell: pwsh
@@ -267,6 +268,34 @@ jobs:
           printf '%s\n' "$invalid_timeout_output" | grep -Fq '[CLI009]'
           override_output="$(YANBAO_TIMEOUT=invalid YANXU_BIN="$YANXU_BIN" "$app" version --timeout 60000 | tr -d '\r')"
           test "$override_output" = "$expected"
+          json_output="$(YANXU_BIN="$YANXU_BIN" "$app" version --message-format json)"
+          printf '%s\n' "$json_output" | jq -e '
+            .schema_version == 1 and .type == "result" and .command == "version" and
+            .success == true and .exit_code == 0 and (.diagnostics | length) == 0
+          ' >/dev/null
+          json_lines="$(YANXU_BIN="$YANXU_BIN" "$app" version --message-format json-lines)"
+          printf '%s\n' "$json_lines" | jq -e '.schema_version == 1 and (.type == "message" or .type == "result")' >/dev/null
+          test "$(printf '%s\n' "$json_lines" | jq -s 'map(select(.type == "result")) | length')" -eq 1
+          set +e
+          json_failure="$(YANXU_BIN="$YANXU_BIN" "$app" build --unknown-option --message-format json 2>"$RUNNER_TEMP/yanbao-json-error.log")"
+          json_failure_status=$?
+          set -e
+          test "$json_failure_status" -eq 1
+          printf '%s\n' "$json_failure" | jq -e '
+            .success == false and .exit_code == 1 and .phase == "failed" and
+            .diagnostics[0].code == "CLI002" and .diagnostics[0].original_exit_code == 1
+          ' >/dev/null
+          test -s "$RUNNER_TEMP/yanbao-json-error.log"
+          python_bin="$(command -v python3 || command -v python)"
+          set +e
+          subprocess_failure="$(YANXU_BIN="$python_bin" "$app" version --message-format json 2>"$RUNNER_TEMP/yanbao-subprocess-error.log")"
+          subprocess_failure_status=$?
+          set -e
+          test "$subprocess_failure_status" -eq 1
+          printf '%s\n' "$subprocess_failure" | jq -e '
+            .diagnostics[0].code == "YANXU_PROTOCOL" and
+            .diagnostics[0].original_exit_code == 2
+          ' >/dev/null
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             cp "$app" yanbao-app.exe
             launcher_output="$(YANXU_BIN="$YANXU_BIN" ./yanbao.cmd --version | tr -d '\r')"

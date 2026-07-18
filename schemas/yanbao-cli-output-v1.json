@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yanxu.dev/schemas/yanbao-cli-output-v1.json",
+  "oneOf": [
+    { "$ref": "#/$defs/result" },
+    { "$ref": "#/$defs/message_event" },
+    { "$ref": "#/$defs/diagnostic_event" },
+    { "$ref": "#/$defs/change_event" },
+    { "$ref": "#/$defs/artifact_event" }
+  ],
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["schema", "schema_version", "type", "command"],
+      "properties": {
+        "schema": { "const": "https://yanxu.dev/schemas/yanbao-cli-output-v1.json" },
+        "schema_version": { "const": 1 },
+        "type": { "type": "string" },
+        "command": { "type": "string" }
+      }
+    },
+    "message": {
+      "type": "object",
+      "required": ["phase", "message"],
+      "properties": {
+        "phase": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "diagnostic": {
+      "type": "object",
+      "required": ["code", "severity", "message", "file", "range", "suggestion", "original_exit_code"],
+      "properties": {
+        "code": { "type": "string" },
+        "severity": { "type": "string" },
+        "message": { "type": "string" },
+        "file": { "type": "string" },
+        "range": { "type": ["object", "null"] },
+        "suggestion": { "type": "string" },
+        "original_exit_code": { "type": ["integer", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "change": {
+      "type": "object",
+      "required": ["kind", "path", "message", "details"],
+      "properties": {
+        "kind": { "type": "string" },
+        "path": { "type": "string" },
+        "message": { "type": "string" },
+        "details": {}
+      },
+      "additionalProperties": false
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["kind", "path", "checksum", "message", "details"],
+      "properties": {
+        "kind": { "type": "string" },
+        "path": { "type": "string" },
+        "checksum": { "type": "string" },
+        "message": { "type": "string" },
+        "details": {}
+      },
+      "additionalProperties": false
+    },
+    "result": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["success", "exit_code", "project_root", "phase", "diagnostics", "changes", "artifacts", "duration_ms", "messages"],
+          "properties": {
+            "type": { "const": "result" },
+            "success": { "type": "boolean" },
+            "exit_code": { "type": "integer" },
+            "project_root": { "type": "string" },
+            "phase": { "enum": ["complete", "failed"] },
+            "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/diagnostic" } },
+            "changes": { "type": "array", "items": { "$ref": "#/$defs/change" } },
+            "artifacts": { "type": "array", "items": { "$ref": "#/$defs/artifact" } },
+            "duration_ms": { "type": "number", "minimum": 0 },
+            "messages": { "type": "array", "items": { "$ref": "#/$defs/message" } }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "message_event": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["phase", "message"],
+          "properties": {
+            "type": { "const": "message" },
+            "phase": { "type": "string" },
+            "message": { "type": "string" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "diagnostic_event": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["phase", "diagnostic"],
+          "properties": {
+            "type": { "const": "diagnostic" },
+            "phase": { "type": "string" },
+            "diagnostic": { "$ref": "#/$defs/diagnostic" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "change_event": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["phase", "change"],
+          "properties": {
+            "type": { "const": "change" },
+            "phase": { "type": "string" },
+            "change": { "$ref": "#/$defs/change" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "artifact_event": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": ["phase", "artifact"],
+          "properties": {
+            "type": { "const": "artifact" },
+            "phase": { "type": "string" },
+            "artifact": { "$ref": "#/$defs/artifact" }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}
