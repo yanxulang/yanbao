@@ -84,7 +84,9 @@ jobs:
           test "$(sed -n 's/^许可 = "\([^"]*\)"$/\1/p' 言序.toml)" = "MIT"
           grep -Fqx "MIT License" LICENSE
           sh -n yanbao scripts/install.sh scripts/verify-toolchain.sh \
-            scripts/generate-sbom.sh scripts/generate-build-metadata.sh
+            scripts/generate-sbom.sh scripts/generate-build-metadata.sh \
+            scripts/release-latest-policy.sh scripts/test-release-latest-policy.sh
+          sh scripts/test-release-latest-policy.sh
 
   toolchain-compatibility:
     name: ${{ matrix.label }}
