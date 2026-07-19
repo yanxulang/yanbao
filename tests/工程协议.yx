@@ -3,6 +3,102 @@
 引「../src/核心.yx」为 核心；
 引「../src/输出.yx」为 输出；
 
+定 审计必需检查 为【
+    「lock_checksum_sha256」，「source_transport」，「git_exact_revision」，「spdx_license」，
+    「registry_yanked」，「registry_vulnerabilities」，「duplicate_versions」，「target_match」，
+    「native_abi」，「native_target」，「native_checksum」，「native_provenance」
+】；
+
+法 审计能力（检查：列<文>，版本）：典 则
+    归 {「schema_version」：版本，「checks」：检查}；
+终
+
+法 审计握手（能力：典）：典 则
+    归 {
+        「yanxu_version」：「1.1.18」，
+        「operation_capabilities」：{「audit」：能力}
+    }；
+终
+
+法 应拒绝审计能力（动作：法（）：数）则
+    令 已失败 为 假；
+    试 则
+        动作（）；
+    救 错误 则
+        置 已失败 为 真；
+        测试.断言（文字.始于（错误.消息，「[AUDIT_CAPABILITY_MISSING]」），「审计能力错误须使用稳定代码」）；
+    终
+    测试.断言（已失败，「缺失、不完整或不一致的审计能力必须失败」）；
+终
+
+法 旧核心缺少能力（）：数 则
+    核心.确认审计握手（{「yanxu_version」：「1.1.17」}）；归 0；
+终
+
+法 握手检查不完整（）：数 则
+    核心.确认审计握手（审计握手（审计能力（审计必需检查【：11】，1）））；归 0；
+终
+
+法 握手版本无效（）：数 则
+    核心.确认审计握手（审计握手（审计能力（审计必需检查，2）））；归 0；
+终
+
+法 响应缺少能力（）：数 则
+    定 握手能力 为 核心.确认审计握手（审计握手（审计能力（审计必需检查，1）））；
+    核心.确认审计响应（握手能力，{「findings」：【】}）；归 0；
+终
+
+法 响应能力不一致（）：数 则
+    定 握手能力 为 核心.确认审计握手（审计握手（审计能力（审计必需检查，1）））；
+    核心.确认审计响应（握手能力，{
+        「audit_capabilities」：审计能力（审计必需检查【1：】，1），「findings」：【】
+    }）；归 0；
+终
+
+法 响应版本无效（）：数 则
+    定 握手能力 为 核心.确认审计握手（审计握手（审计能力（审计必需检查，1）））；
+    核心.确认审计响应（握手能力，{
+        「audit_capabilities」：审计能力（审计必需检查，2），「findings」：【】
+    }）；归 0；
+终
+
+应拒绝审计能力（旧核心缺少能力）；
+应拒绝审计能力（握手检查不完整）；
+应拒绝审计能力（握手版本无效）；
+应拒绝审计能力（响应缺少能力）；
+应拒绝审计能力（响应能力不一致）；
+应拒绝审计能力（响应版本无效）；
+
+定 完整握手能力 为 核心.确认审计握手（审计握手（审计能力（审计必需检查，1）））；
+测试.相等（完整握手能力【「schema_version」】，1）；
+测试.相等（长度（完整握手能力【「checks」】），长度（审计必需检查））；
+逐 下标 于 范围（0，长度（审计必需检查））则
+    测试.相等（完整握手能力【「checks」】【下标】，审计必需检查【下标】）；
+终
+定 扩展检查 为【
+    「lock_checksum_sha256」，「source_transport」，「git_exact_revision」，「spdx_license」，
+    「registry_yanked」，「registry_vulnerabilities」，「duplicate_versions」，「target_match」，
+    「native_abi」，「native_target」，「native_checksum」，「native_provenance」，
+    「future_transparency_log」
+】；
+定 扩展握手 为 审计握手（审计能力（扩展检查，1））；
+置 扩展握手【「operation_capabilities」】【「future_operation」】为 {「schema_version」：7}；
+定 扩展握手能力 为 核心.确认审计握手（扩展握手）；
+测试.相等（长度（扩展握手能力【「checks」】），12）；
+定 扩展响应检查 为【
+    「future_signature_format」，「native_provenance」，「native_checksum」，「native_target」，
+    「native_abi」，「target_match」，「duplicate_versions」，「registry_vulnerabilities」，
+    「registry_yanked」，「spdx_license」，「git_exact_revision」，「source_transport」，
+    「lock_checksum_sha256」
+】；
+定 扩展响应能力 为 核心.确认审计响应（扩展握手能力，{
+    「audit_capabilities」：审计能力（扩展响应检查，1），
+    「findings」：【】，「future_field」：真
+}）；
+测试.相等（长度（扩展响应能力【「checks」】），12）；
+测试.相等（扩展响应能力【「checks」】【0】，「lock_checksum_sha256」）；
+测试.相等（扩展响应能力【「checks」】【11】，「native_provenance」）；
+
 定 成功外壳 为 核心.分析工程响应（{
     「protocol_version」：1，「ok」：真，「result」：{「value」：42}，
     「future_field」：{「ignored」：真}
