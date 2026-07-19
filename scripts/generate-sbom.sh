@@ -11,12 +11,29 @@ sha256_file() {
   fi
 }
 
-if [ "$#" -ne 1 ]; then
-  echo "用法：scripts/generate-sbom.sh <输出>" >&2
+sha256_text() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}'
+  else
+    shasum -a 256 | awk '{print $1}'
+  fi
+}
+
+if [ "$#" -ne 3 ]; then
+  echo "用法：scripts/generate-sbom.sh <目标> <归档> <输出>" >&2
   exit 2
 fi
 
-output=$1
+target=$1
+archive=$2
+output=$3
+case "$target" in
+  ""|*[!A-Za-z0-9_.-]*) echo "目标名称含非法字符：$target" >&2; exit 2 ;;
+esac
+if [ ! -f "$archive" ]; then
+  echo "SBOM 对应归档不存在：$archive" >&2
+  exit 2
+fi
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 root=$(git -C "$script_dir/.." rev-parse --show-toplevel)
 manifest="$root/言序.toml"
@@ -53,20 +70,28 @@ if [ "$lock_manifest_sha" != "$manifest_sha" ]; then
   echo "锁文件清单摘要与当前言序.toml 不一致" >&2
   exit 1
 fi
+if [ "$lock_target" != "$target" ]; then
+  echo "锁文件目标 $lock_target 与 SBOM 目标 $target 不一致" >&2
+  exit 1
+fi
 
 commit_sha=$(git -C "$root" rev-parse HEAD)
 commit_timestamp=$(git -C "$root" show -s --format=%cI HEAD)
-serial_number=$(printf '%s\n' "$commit_sha" | sed -E \
+serial_seed=$(printf '%s:%s\n' "$commit_sha" "$target" | sha256_text)
+serial_number=$(printf '%s\n' "$serial_seed" | sed -E \
   's/^(.{8})(.{4}).(.{3}).(.{3})(.{12}).*$/urn:uuid:\1-\2-8\3-a\4-\5/')
 if ! printf '%s\n' "$serial_number" | grep -Eq \
   '^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'; then
-  echo "不能从提交摘要生成 CycloneDX 序列号" >&2
+  echo "不能从提交与目标生成 CycloneDX 序列号" >&2
   exit 1
 fi
 source_ref=${YANBAO_SOURCE_REF:-${GITHUB_REF:-refs/tags/v$version}}
 repository=${GITHUB_REPOSITORY:-YanXuLang/yanbao}
 component_ref="pkg:github/YanXuLang/yanbao@$version"
 runtime_ref="pkg:github/YanXuLang/yanxu@$minimum_yanxu"
+archive_name=$(basename -- "$archive")
+archive_sha=$(sha256_file "$archive")
+archive_bytes=$(wc -c < "$archive" | tr -d ' ')
 
 mkdir -p "$(dirname -- "$output")"
 jq -S -n \
@@ -80,6 +105,10 @@ jq -S -n \
   --arg timestamp "$commit_timestamp" \
   --arg manifest_format "$manifest_format" \
   --arg manifest_sha "$manifest_sha" \
+  --arg target "$target" \
+  --arg archive_name "$archive_name" \
+  --arg archive_sha "$archive_sha" \
+  --arg archive_bytes "$archive_bytes" \
   --arg lock_format "$lock_format" \
   --arg lock_generator "$lock_generator" \
   --arg lock_target "$lock_target" \
@@ -111,6 +140,10 @@ jq -S -n \
           {name: "cdx:yanbao:source:commit", value: $commit},
           {name: "cdx:yanbao:manifest:format", value: $manifest_format},
           {name: "cdx:yanbao:manifest:sha256", value: $manifest_sha},
+          {name: "cdx:yanbao:artifact:name", value: $archive_name},
+          {name: "cdx:yanbao:artifact:sha256", value: $archive_sha},
+          {name: "cdx:yanbao:artifact:bytes", value: $archive_bytes},
+          {name: "cdx:yanbao:build:target", value: $target},
           {name: "cdx:yanbao:lock:format", value: $lock_format},
           {name: "cdx:yanbao:lock:manifest-sha256", value: $manifest_sha},
           {name: "cdx:yanbao:lock:generator", value: $lock_generator},
@@ -139,7 +172,6 @@ jq -S -n \
       {ref: $runtime_ref, dependsOn: []}
     ]
   }' > "$output.tmp"
-mv "$output.tmp" "$output"
 
 jq -e \
   --arg version "$version" \
@@ -147,6 +179,10 @@ jq -e \
   --arg commit "$commit_sha" \
   --arg serial_number "$serial_number" \
   --arg manifest_sha "$manifest_sha" \
+  --arg target "$target" \
+  --arg archive_name "$archive_name" \
+  --arg archive_sha "$archive_sha" \
+  --arg archive_bytes "$archive_bytes" \
   --arg lock_sha "$lock_sha" \
   '.bomFormat == "CycloneDX" and .specVersion == "1.5"
    and .serialNumber == $serial_number and .version == 1
@@ -157,14 +193,25 @@ jq -e \
    and ([.metadata.component.properties[] |
      select(.name == "cdx:yanbao:manifest:sha256" and .value == $manifest_sha)] | length) == 1
    and ([.metadata.component.properties[] |
+     select(.name == "cdx:yanbao:artifact:name" and .value == $archive_name)] | length) == 1
+   and ([.metadata.component.properties[] |
+     select(.name == "cdx:yanbao:artifact:sha256" and .value == $archive_sha)] | length) == 1
+   and ([.metadata.component.properties[] |
+     select(.name == "cdx:yanbao:artifact:bytes" and .value == $archive_bytes)] | length) == 1
+   and ([.metadata.component.properties[] |
+     select(.name == "cdx:yanbao:build:target" and .value == $target)] | length) == 1
+   and ([.metadata.component.properties[] |
+     select(.name == "cdx:yanbao:lock:target" and .value == $target)] | length) == 1
+   and ([.metadata.component.properties[] |
      select(.name == "cdx:yanbao:lock:manifest-sha256" and .value == $manifest_sha)] | length) == 1
    and ([.metadata.component.properties[] |
      select(.name == "cdx:yanbao:lock:sha256" and .value == $lock_sha)] | length) == 1
    and ([.components[] |
      select(.name == "yanxu" and .version == $minimum_yanxu and .scope == "required")] | length) == 1
-   and (.dependencies | length) == 2' "$output" >/dev/null
+   and (.dependencies | length) == 2' "$output.tmp" >/dev/null
 
-if grep -F "$root" "$output" >/dev/null; then
+if grep -F "$root" "$output.tmp" >/dev/null; then
   echo "SBOM 不得包含构建机绝对路径" >&2
   exit 1
 fi
+mv "$output.tmp" "$output"

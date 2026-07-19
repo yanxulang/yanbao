@@ -25,7 +25,7 @@ irm https://get.yanxu.dev/yanbao/windows | iex
 
 安装器按操作系统与 x86-64/ARM64 选择制品，强制验证独立 SHA-256 文件，再用本机言序运行`yanbao --version`确认兼容性。可分别用`YANXU_BIN`、`YANBAO_INSTALL_DIR`、`YANBAO_VERSION`和`YANBAO_GITHUB_TOKEN`覆盖言序路径、安装目录、版本和 GitHub API 凭据。
 
-每个正式 Release 还提供确定性的 CycloneDX 1.5 SBOM、六份逐目标构建元数据、构建来源证明和 SBOM 证明。构建元数据固定记录源码提交、目标平台、正式构建配置、言序编译器版本、清单与锁文件摘要，以及归档和独立应用摘要；Release 在公开前和安装冒烟后都会重新核对全部资产与证明。
+每个正式 Release 还提供六份确定性的逐目标 CycloneDX 1.5 SBOM、六份逐目标构建元数据、构建来源证明和 SBOM 证明。每份 SBOM 及其签名谓词都绑定对应归档摘要、目标和锁文件摘要；构建元数据固定记录源码提交、目标平台、正式构建配置、言序编译器版本、清单与锁文件摘要，以及归档和独立应用摘要。Release 在公开前和安装冒烟后都会重新核对全部资产与证明。
 
 ## 源码运行
 
@@ -97,7 +97,8 @@ yanxu test tests
 compile_source="$(mktemp -d)"
 cp src/*.yx "$compile_source/"
 yanxu compile "$compile_source/主.yx" -o build/yanbao --release --standalone
-sh scripts/generate-sbom.sh build/yanbao.cdx.json
+target="$(sed -n 's/^target = "\([^"]*\)"$/\1/p' 言序.lock)"
+sh scripts/generate-sbom.sh "$target" build/yanbao "build/yanbao-$target.cdx.json"
 rm -rf "$compile_source"
 ./yanbao doctor
 ```

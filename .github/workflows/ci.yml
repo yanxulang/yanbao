@@ -85,8 +85,10 @@ jobs:
           grep -Fqx "MIT License" LICENSE
           sh -n yanbao scripts/install.sh scripts/verify-toolchain.sh \
             scripts/generate-sbom.sh scripts/generate-build-metadata.sh \
-            scripts/release-latest-policy.sh scripts/test-release-latest-policy.sh
+            scripts/release-latest-policy.sh scripts/test-release-latest-policy.sh \
+            scripts/verify-release-sbom.sh scripts/test-release-sbom-binding.sh
           sh scripts/test-release-latest-policy.sh
+          sh scripts/test-release-sbom-binding.sh
 
   toolchain-compatibility:
     name: ${{ matrix.label }}
@@ -151,18 +153,27 @@ jobs:
             "$RUNNER_TEMP/yanbao-resolve.json" >/dev/null
           first="$RUNNER_TEMP/yanbao-sbom-first/yanbao.cdx.json"
           second="$RUNNER_TEMP/yanbao-sbom-second/yanbao.cdx.json"
-          sh scripts/generate-sbom.sh "$first"
-          sh scripts/generate-sbom.sh "$second"
+          target=x86_64-unknown-linux-gnu
+          archive="$RUNNER_TEMP/yanbao-$target.tar.gz"
+          cp 言序.toml "$archive"
+          sh scripts/generate-sbom.sh "$target" "$archive" "$first"
+          sh scripts/generate-sbom.sh "$target" "$archive" "$second"
           cmp "$first" "$second"
           version="$(sed -n 's/^版本 = "\([^"]*\)"$/\1/p' 言序.toml)"
           minimum="$(sed -n 's/^言序 = ">=\([^"]*\)"$/\1/p' 言序.toml)"
           manifest_sha="$(sha256sum 言序.toml | awk '{print $1}')"
           lock_sha="$(sha256sum 言序.lock | awk '{print $1}')"
+          archive_sha="$(sha256sum "$archive" | awk '{print $1}')"
+          archive_bytes="$(wc -c < "$archive" | tr -d ' ')"
           jq -e \
             --arg version "$version" \
             --arg minimum "$minimum" \
             --arg commit "$GITHUB_SHA" \
             --arg manifest_sha "$manifest_sha" \
+            --arg target "$target" \
+            --arg archive "$(basename "$archive")" \
+            --arg archive_sha "$archive_sha" \
+            --arg archive_bytes "$archive_bytes" \
             --arg lock_sha "$lock_sha" \
             '.bomFormat == "CycloneDX" and .specVersion == "1.5"
              and (.serialNumber | test("^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"))
@@ -171,6 +182,16 @@ jobs:
                select(.name == "cdx:yanbao:source:commit" and .value == $commit)] | length) == 1
              and ([.metadata.component.properties[] |
                select(.name == "cdx:yanbao:manifest:sha256" and .value == $manifest_sha)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:artifact:name" and .value == $archive)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:artifact:sha256" and .value == $archive_sha)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:artifact:bytes" and .value == $archive_bytes)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:build:target" and .value == $target)] | length) == 1
+             and ([.metadata.component.properties[] |
+               select(.name == "cdx:yanbao:lock:target" and .value == $target)] | length) == 1
              and ([.metadata.component.properties[] |
                select(.name == "cdx:yanbao:lock:sha256" and .value == $lock_sha)] | length) == 1
              and ([.components[] |
@@ -252,7 +273,9 @@ jobs:
           test ! -e Cargo.toml
           test -z "$(find src -name '*.rs' -print -quit)"
           sh -n yanbao scripts/install.sh scripts/verify-toolchain.sh \
-            scripts/generate-sbom.sh scripts/generate-build-metadata.sh
+            scripts/generate-sbom.sh scripts/generate-build-metadata.sh \
+            scripts/release-latest-policy.sh scripts/test-release-latest-policy.sh \
+            scripts/verify-release-sbom.sh scripts/test-release-sbom-binding.sh
           jq -e '."$id" == "https://yanxu.dev/schemas/yanbao-cli-output-v1.json"' schemas/yanbao-cli-output-v1.json >/dev/null
       - name: 检查纯言序实现与 Windows 脚本
         if: runner.os == 'Windows'

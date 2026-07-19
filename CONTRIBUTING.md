@@ -15,8 +15,9 @@ YANXU_BIN=yanxu ./yanbao --version
 compile_source="$(mktemp -d)"
 cp src/*.yx "$compile_source/"
 yanxu compile "$compile_source/主.yx" -o build/yanbao --release --standalone
-sh scripts/generate-sbom.sh build/yanbao-first.cdx.json
-sh scripts/generate-sbom.sh build/yanbao-second.cdx.json
+target="$(sed -n 's/^target = "\([^"]*\)"$/\1/p' 言序.lock)"
+sh scripts/generate-sbom.sh "$target" build/yanbao build/yanbao-first.cdx.json
+sh scripts/generate-sbom.sh "$target" build/yanbao build/yanbao-second.cdx.json
 cmp build/yanbao-first.cdx.json build/yanbao-second.cdx.json
 rm -rf "$compile_source"
 ```
