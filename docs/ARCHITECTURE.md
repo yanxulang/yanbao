@@ -8,7 +8,7 @@
 
 ## 唯一依赖语义
 
-言包通过 `yanxu package protocol <JSON>`调用协议版本 1。协议握手公开言序版本、目标平台以及支持的清单、锁、字节码、YXB 和原生 ABI 版本。以下能力只在言序核心实现：
+言包通过 `yanxu package protocol <JSON>`调用协议版本 1。协议握手公开言序版本、目标平台以及支持的清单、锁、字节码、YXB 和原生 ABI 版本。`operation_capabilities`按操作声明可验证的能力；未知操作与未知检查标识由消费端忽略，以便核心向前扩展。以下能力只在言序核心实现：
 
 - 格式 1/2 清单读取与格式 2 写入；
 - 依赖别名、开发依赖、公开导出和包子模块；
@@ -38,7 +38,9 @@ Release 先汇总六个目标各自的归档、校验文件、构建元数据和
 
 ## 审计门禁
 
-核心工程协议负责验证锁定内容 SHA-256、远程来源、Git 精确与符号修订、SPDX 许可证、索引撤回/漏洞元数据、重复版本、目标架构及原生 ABI/目标/校验和/签名状态。远程索引、制品和 Git 来源在访问前只允许 HTTPS 或 SSH，下载先写同目录临时文件并原子替换缓存；本地路径和`file://`索引仍可用于离线与开发场景。索引把`yanked`和`vulnerabilities`作为显式可选元数据，字段缺失与空数组语义不同：缺失必须产生审计发现，不能推断为未撤回或无漏洞。
+核心工程协议负责验证锁定内容 SHA-256、远程来源、Git 精确与符号修订、SPDX 许可证、索引撤回/漏洞元数据、重复版本、目标架构及原生 ABI/目标/校验和/签名状态。执行审计前，言包要求握手中的`operation_capabilities.audit`使用 Schema 1 并完整声明十二项必需检查；核心的审计响应还须以`audit_capabilities`回显同一 Schema 与检查覆盖。缺少字段、无效 Schema、不完整覆盖或握手与响应不一致均以`AUDIT_CAPABILITY_MISSING`拒绝审计结果，不能把旧核心的部分检查误报为完整通过；这项收紧只作用于`audit`，其他命令继续兼容最低言序 1.1.17。言包只比较已知检查集合，未知扩展检查不会阻断审计。远程索引、制品和 Git 来源在访问前只允许 HTTPS 或 SSH，下载先写同目录临时文件并原子替换缓存；本地路径和`file://`索引仍可用于离线与开发场景。索引把`yanked`和`vulnerabilities`作为显式可选元数据，字段缺失与空数组语义不同：缺失必须产生审计发现，不能推断为未撤回或无漏洞。
+
+Schema 1 的已知检查集合为`lock_checksum_sha256`、`source_transport`、`git_exact_revision`、`spdx_license`、`registry_yanked`、`registry_vulnerabilities`、`duplicate_versions`、`target_match`、`native_abi`、`native_target`、`native_checksum`和`native_provenance`。比较按集合进行，不依赖排列顺序。
 
 `src/审计.yx`负责验证核心发现对象、规范严重度、应用退出策略和复核抑制。每项发现必须是包含非空`code`、`severity`、`package`和`message`的有界对象；可选`path/line`必须组成有界路径与 1 基整数位置，未知扩展字段继续忽略。未知严重度、错误类型、缺失字段或不可安全用于抑制的代码都以`AUDIT_SCHEMA`拒绝继续。`warning`规范为`medium`，`error`规范为`high`，避免把无法理解的安全结果静默降级。
 

@@ -93,6 +93,7 @@ jobs:
           sh -n yanbao scripts/install.sh scripts/verify-toolchain.sh \
             scripts/generate-sbom.sh scripts/generate-build-metadata.sh \
             scripts/test-build-metadata-compiler.sh \
+            scripts/test-audit-capability-negotiation.sh \
             scripts/release-latest-policy.sh scripts/test-release-latest-policy.sh \
             scripts/verify-release-sbom.sh scripts/test-release-sbom-binding.sh
           sh scripts/test-build-metadata-compiler.sh
@@ -150,6 +151,10 @@ jobs:
         env:
           YANXU_EXPECTED_VERSION: ${{ matrix.channel == 'minimum' && needs.toolchain-versions.outputs.minimum_version || matrix.channel == 'stable' && needs.toolchain-versions.outputs.stable_version || '' }}
         run: sh scripts/verify-toolchain.sh
+      - name: 验证审计能力协商失败关闭
+        if: matrix.channel == 'minimum'
+        shell: bash
+        run: sh scripts/test-audit-capability-negotiation.sh "$YANXU_BIN"
       - name: 使用最低工具链验证可复现 SBOM
         if: matrix.channel == 'minimum'
         shell: bash
@@ -285,6 +290,7 @@ jobs:
           sh -n yanbao scripts/install.sh scripts/verify-toolchain.sh \
             scripts/generate-sbom.sh scripts/generate-build-metadata.sh \
             scripts/test-build-metadata-compiler.sh \
+            scripts/test-audit-capability-negotiation.sh \
             scripts/release-latest-policy.sh scripts/test-release-latest-policy.sh \
             scripts/verify-release-sbom.sh scripts/test-release-sbom-binding.sh
           jq -e '."$id" == "https://yanxu.dev/schemas/yanbao-cli-output-v1.json"' schemas/yanbao-cli-output-v1.json >/dev/null

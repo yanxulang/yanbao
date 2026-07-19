@@ -204,6 +204,68 @@
     归 假；
 终
 
+公 法 审计必需检查（）：列<文> 则
+    归【
+        「lock_checksum_sha256」，「source_transport」，「git_exact_revision」，「spdx_license」，
+        「registry_yanked」，「registry_vulnerabilities」，「duplicate_versions」，「target_match」，
+        「native_abi」，「native_target」，「native_checksum」，「native_provenance」
+    】；
+终
+
+法 审计能力失败（消息：文）则
+    抛「[AUDIT_CAPABILITY_MISSING] 」加 消息；
+终
+
+法 规范审计能力（能力，来源：文）：典 则
+    若 非（能力 是 典）则 审计能力失败（来源 加「缺少审计能力对象」）；终
+    若 非 有键（能力，「schema_version」）则 审计能力失败（来源 加「缺少审计能力 schema_version」）；终
+    定 版本 为 能力【「schema_version」】；
+    若 非（版本 是 数）或 数学.下取整（版本）不等于 版本 或 版本 不等于 1 则
+        审计能力失败（来源 加「不支持审计能力 schema_version」）；
+    终
+    若 非 有键（能力，「checks」）则 审计能力失败（来源 加「缺少审计检查列表」）；终
+    定 检查列 为 能力【「checks」】；
+    若 非（检查列 是 列）则 审计能力失败（来源 加「的审计 checks 须为列表」）；终
+    逐 检查 于 检查列 则
+        若 非（检查 是 文）则 审计能力失败（来源 加「的审计 checks 须只包含文字标识」）；终
+    终
+    定 必需 为 审计必需检查（）；
+    逐 检查 于 必需 则
+        若 非 列含（检查列，检查）则 审计能力失败（来源 加「缺少必需审计检查“」加 检查 加「”」）；终
+    终
+    归 {「schema_version」：1，「checks」：必需}；
+终
+
+法 审计检查相同（左：列，右：列）：理 则
+    若 长度（左）不等于 长度（右）则 归 假；终
+    逐 检查 于 左 则 若 非 列含（右，检查）则 归 假；终 终
+    逐 检查 于 右 则 若 非 列含（左，检查）则 归 假；终 终
+    归 真；
+终
+
+公 法 确认审计握手（握手）：典 则
+    若 非（握手 是 典）或 非 有键（握手，「operation_capabilities」）则
+        审计能力失败（「工具链握手缺少 operation_capabilities.audit」）；
+    终
+    定 操作能力 为 握手【「operation_capabilities」】；
+    若 非（操作能力 是 典）或 非 有键（操作能力，「audit」）则
+        审计能力失败（「工具链握手缺少 operation_capabilities.audit」）；
+    终
+    归 规范审计能力（操作能力【「audit」】，「工具链握手」）；
+终
+
+公 法 确认审计响应（握手能力，响应）：典 则
+    定 已确认握手 为 规范审计能力（握手能力，「工具链握手」）；
+    若 非（响应 是 典）或 非 有键（响应，「audit_capabilities」）则
+        审计能力失败（「审计响应缺少 audit_capabilities」）；
+    终
+    定 已确认响应 为 规范审计能力（响应【「audit_capabilities」】，「审计响应」）；
+    若 已确认响应【「schema_version」】不等于 已确认握手【「schema_version」】或 非 审计检查相同（已确认响应【「checks」】，已确认握手【「checks」】）则
+        审计能力失败（「审计响应与工具链握手不一致」）；
+    终
+    归 已确认响应；
+终
+
 公 法 工具链版本兼容（版本：文）：理 则
     定 无构建元数据 为 文字.分割（版本，「+」）【0】；
     定 预发布分割 为 文字.分割（无构建元数据，「-」）；定 有预发布 为 长度（预发布分割）大于 1；
