@@ -60,6 +60,7 @@ jobs:
           toolchain="$(sed -n 's/^言序 = "\([^"]*\)"$/\1/p' 言序.toml)"
           test -n "$version"
           test "$RELEASE_TAG" = "v$version"
+          printf '%s' '' | sh scripts/release-latest-policy.sh "$RELEASE_TAG" >/dev/null
           if [[ ! "$toolchain" =~ ^\>\=([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             echo "言序.toml 的最低版本必须使用 >=X.Y.Z" >&2
             exit 1
@@ -1013,8 +1014,23 @@ jobs:
               ;;
             *) echo "Release 状态或资产集合不满足正式发布条件" >&2; exit 1 ;;
           esac
+
+          stable_tags="$(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name'
+          )"
+          latest_decision="$(printf '%s\n' "$stable_tags" | \
+            sh scripts/release-latest-policy.sh "$RELEASE_TAG")"
+          case "$latest_decision" in
+            latest) latest_flag=true ;;
+            not-latest)
+              latest_flag=false
+              echo "已有更高版本的稳定 Release；$RELEASE_TAG 将正式发布但不改变 latest。"
+              ;;
+            *) echo "未知 latest 决策：$latest_decision" >&2; exit 1 ;;
+          esac
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --draft=false --prerelease=false --latest --verify-tag
+            --draft=false --prerelease=false --latest="$latest_flag" --verify-tag
 
   quarantine:
     name: 冒烟失败时复验预发布状态
