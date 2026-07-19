@@ -44,6 +44,7 @@ jobs:
     outputs:
       version: ${{ steps.metadata.outputs.version }}
       yanxu_version: ${{ steps.metadata.outputs.yanxu_version }}
+      yanxu_commit: ${{ steps.metadata.outputs.yanxu_commit }}
       commit: ${{ steps.metadata.outputs.commit }}
       attestation_ref: ${{ steps.metadata.outputs.attestation_ref }}
     steps:
@@ -54,6 +55,8 @@ jobs:
       - name: 校验标签、版本、工具链与主分支
         id: metadata
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           version="$(sed -n 's/^版本 = "\([^"]*\)"$/\1/p' 言序.toml)"
@@ -66,6 +69,12 @@ jobs:
             exit 1
           fi
           yanxu_version="${BASH_REMATCH[1]}"
+          yanxu_tag="v$yanxu_version"
+          yanxu_commit="$(gh api "repos/YanXuLang/yanxu/commits/$yanxu_tag" --jq .sha)"
+          if [[ ! "$yanxu_commit" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "言序 $yanxu_tag 的官方标签提交无效：$yanxu_commit" >&2
+            exit 1
+          fi
           grep -Fqx "## $version" CHANGELOG.md
           git fetch origin main --no-tags
           tag_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
@@ -85,6 +94,7 @@ jobs:
           {
             echo "version=$version"
             echo "yanxu_version=$yanxu_version"
+            echo "yanxu_commit=$yanxu_commit"
             echo "commit=$tag_commit"
             echo "attestation_ref=$GITHUB_REF"
           } >> "$GITHUB_OUTPUT"
@@ -124,6 +134,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       YANXU_VERSION: ${{ needs.validate.outputs.yanxu_version }}
+      YANXU_EXPECTED_VERSION: ${{ needs.validate.outputs.yanxu_version }}
+      YANXU_EXPECTED_COMMIT: ${{ needs.validate.outputs.yanxu_commit }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -433,6 +445,7 @@ jobs:
         env:
           VERSION: ${{ needs.validate.outputs.version }}
           YANXU_VERSION: ${{ needs.validate.outputs.yanxu_version }}
+          YANXU_COMMIT: ${{ needs.validate.outputs.yanxu_commit }}
           COMMIT_SHA: ${{ needs.validate.outputs.commit }}
           ATTESTATION_REF: ${{ needs.validate.outputs.attestation_ref }}
           REPOSITORY: ${{ github.repository }}
@@ -527,6 +540,8 @@ jobs:
             jq -e \
               --arg version "$VERSION" \
               --arg minimum "$YANXU_VERSION" \
+              --arg compiler_ref "refs/tags/v$YANXU_VERSION" \
+              --arg compiler_commit "$YANXU_COMMIT" \
               --arg commit "$COMMIT_SHA" \
               --arg ref "refs/tags/$RELEASE_TAG" \
               --arg target "$target" \
@@ -547,6 +562,8 @@ jobs:
                and .build.target == $target and .build.profile == "release"
                and .build.standalone and (.build.separate_runtime_bundled | not)
                and .build.compiler.version == $minimum
+               and .build.compiler.source_ref == $compiler_ref
+               and .build.compiler.commit_sha == $compiler_commit
                and .build.compiler.target == $target and .build.compiler.mode == "release"
                and .build.manifest.sha256 == $manifest_sha
                and .build.lock.sha256 == $lock_sha and .build.lock.target == $target
@@ -738,6 +755,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.validate.outputs.version }}
+          YANXU_VERSION: ${{ needs.validate.outputs.yanxu_version }}
+          YANXU_COMMIT: ${{ needs.validate.outputs.yanxu_commit }}
           COMMIT_SHA: ${{ needs.validate.outputs.commit }}
           ATTESTATION_REF: ${{ needs.validate.outputs.attestation_ref }}
         shell: bash
@@ -811,6 +830,17 @@ jobs:
               "refs/tags/$RELEASE_TAG" "$target" "$dist/$archive" \
               "$dist/yanbao-$target.lock" "$dist/yanbao-$target.cdx.json" \
               "$sbom_attestation"
+            jq -e \
+              --arg version "$YANXU_VERSION" \
+              --arg ref "refs/tags/v$YANXU_VERSION" \
+              --arg commit "$YANXU_COMMIT" \
+              --arg target "$target" \
+              '.build.compiler.version == $version
+               and .build.compiler.source_ref == $ref
+               and .build.compiler.commit_sha == $commit
+               and .build.compiler.target == $target
+               and .build.compiler.mode == "release"' \
+              "$dist/yanbao-$target.build.json" >/dev/null
           done
       - name: 保存已验签发行快照
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -926,6 +956,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.validate.outputs.version }}
           YANXU_VERSION: ${{ needs.validate.outputs.yanxu_version }}
+          YANXU_COMMIT: ${{ needs.validate.outputs.yanxu_commit }}
           COMMIT_SHA: ${{ needs.validate.outputs.commit }}
           ATTESTATION_REF: ${{ needs.validate.outputs.attestation_ref }}
         run: |
@@ -997,6 +1028,8 @@ jobs:
             jq -e \
               --arg version "$VERSION" \
               --arg minimum "$YANXU_VERSION" \
+              --arg compiler_ref "refs/tags/v$YANXU_VERSION" \
+              --arg compiler_commit "$YANXU_COMMIT" \
               --arg commit "$COMMIT_SHA" \
               --arg target "$target" \
               --arg archive "$archive" \
@@ -1012,7 +1045,11 @@ jobs:
                and .application.name == $application
                and .application.sha256 == $application_sha
                and .application.bytes == $application_bytes
-               and .build.target == $target and .build.compiler.target == $target
+               and .build.target == $target
+               and .build.compiler.version == $minimum
+               and .build.compiler.source_ref == $compiler_ref
+               and .build.compiler.commit_sha == $compiler_commit
+               and .build.compiler.target == $target and .build.compiler.mode == "release"
                and .build.manifest.sha256 == $manifest_sha
                and .build.lock.sha256 == $lock_sha and .build.lock.target == $target
                and .build.lock.manifest_sha256 == $manifest_sha' \

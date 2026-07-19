@@ -25,7 +25,7 @@ irm https://get.yanxu.dev/yanbao/windows | iex
 
 安装器按操作系统与 x86-64/ARM64 选择制品，强制验证独立 SHA-256 文件，再用本机言序运行`yanbao --version`确认兼容性。可分别用`YANXU_BIN`、`YANBAO_INSTALL_DIR`、`YANBAO_VERSION`和`YANBAO_GITHUB_TOKEN`覆盖言序路径、安装目录、版本和 GitHub API 凭据。
 
-每个正式 Release 还提供六份确定性的逐目标 CycloneDX 1.5 SBOM、六份逐目标构建元数据、构建来源证明和 SBOM 证明。每份 SBOM 及其签名谓词都绑定对应归档摘要、目标和锁文件摘要；构建元数据固定记录源码提交、目标平台、正式构建配置、言序编译器版本、清单与锁文件摘要，以及归档和独立应用摘要。Release 在公开前和安装冒烟后都会重新核对全部资产与证明。
+每个正式 Release 还提供六份确定性的逐目标 CycloneDX 1.5 SBOM、六份逐目标构建元数据、构建来源证明和 SBOM 证明。每份 SBOM 及其签名谓词都绑定对应归档摘要、目标和锁文件摘要；构建元数据固定记录源码提交、目标平台、正式构建配置、言序编译器版本及其官方`refs/tags/v<版本>`提交、清单与锁文件摘要，以及归档和独立应用摘要。Release 在公开前和安装冒烟后都会重新核对全部资产与证明。
 
 ## 源码运行
 
