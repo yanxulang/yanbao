@@ -48,6 +48,8 @@ lockfile=${YANBAO_LOCKFILE:-"$root/言序.lock"}
 version=$(sed -n 's/^版本 = "\([^"]*\)"$/\1/p' "$manifest")
 requirement=$(sed -n 's/^言序 = "\([^"]*\)"$/\1/p' "$manifest")
 minimum_yanxu=${requirement#>=}
+expected_compiler_version=${YANXU_EXPECTED_VERSION:-}
+expected_compiler_commit=${YANXU_EXPECTED_COMMIT:-}
 manifest_format=$(sed -n 's/^格式 = \([0-9][0-9]*\)$/\1/p' "$manifest")
 lock_format=$(sed -n 's/^lock_version = \([0-9][0-9]*\)$/\1/p' "$lockfile")
 lock_manifest_sha=$(sed -n 's/^manifest_checksum = "\([0-9a-f]*\)"$/\1/p' "$lockfile")
@@ -56,12 +58,20 @@ lock_target=$(sed -n 's/^target = "\([^"]*\)"$/\1/p' "$lockfile")
 manifest_sha=$(sha256_file "$manifest")
 lock_sha=$(sha256_file "$lockfile")
 
-for semantic_version in "$version" "$minimum_yanxu"; do
+if [ -z "$expected_compiler_version" ] || [ -z "$expected_compiler_commit" ]; then
+  echo "必须设置预期言序版本 YANXU_EXPECTED_VERSION 和官方标签提交 YANXU_EXPECTED_COMMIT" >&2
+  exit 2
+fi
+for semantic_version in "$version" "$minimum_yanxu" "$expected_compiler_version"; do
   if ! printf '%s\n' "$semantic_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-    echo "言包或最低言序版本不是 X.Y.Z" >&2
+    echo "言包、最低言序或预期编译器版本不是 X.Y.Z" >&2
     exit 2
   fi
 done
+if ! printf '%s\n' "$expected_compiler_commit" | grep -Eq '^[0-9a-f]{40}$'; then
+  echo "预期言序官方标签提交必须是 40 位小写十六进制摘要" >&2
+  exit 2
+fi
 if [ "$requirement" = "$minimum_yanxu" ] || [ -z "$manifest_format" ] || \
    [ -z "$lock_format" ] || [ -z "$lock_manifest_sha" ] || \
    [ -z "$lock_generator" ] || [ -z "$lock_target" ]; then
@@ -74,6 +84,10 @@ if [ "$lock_manifest_sha" != "$manifest_sha" ]; then
 fi
 if [ "$lock_target" != "$target" ]; then
   echo "锁文件目标 $lock_target 与构建目标 $target 不一致" >&2
+  exit 1
+fi
+if ! version_at_least "$expected_compiler_version" "$minimum_yanxu"; then
+  echo "预期言序版本 $expected_compiler_version 低于最低版本 $minimum_yanxu" >&2
   exit 1
 fi
 
@@ -91,9 +105,14 @@ if ! compiler_info=$("$compiler" version --json); then
   exit 2
 fi
 compiler_version=$(printf '%s\n' "$compiler_info" | jq -er '.version')
+compiler_commit=$(printf '%s\n' "$compiler_info" | jq -er '.commit_sha')
 printf '%s\n' "$compiler_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
-if ! version_at_least "$compiler_version" "$minimum_yanxu"; then
-  echo "言序编译器 $compiler_version 低于最低版本 $minimum_yanxu" >&2
+if [ "$compiler_version" != "$expected_compiler_version" ]; then
+  echo "言序编译器版本 $compiler_version 与官方标签版本 $expected_compiler_version 不一致" >&2
+  exit 1
+fi
+if [ "$compiler_commit" != "$expected_compiler_commit" ]; then
+  echo "言序编译器提交 $compiler_commit 与官方标签提交 $expected_compiler_commit 不一致" >&2
   exit 1
 fi
 jq -e --arg target "$target" \
@@ -138,6 +157,7 @@ jq -S -n \
   --arg lock_generator "$lock_generator" \
   --arg lock_target "$lock_target" \
   --arg lock_sha "$lock_sha" \
+  --arg compiler_source_ref "refs/tags/v$expected_compiler_version" \
   --argjson compiler "$compiler_info" \
   '{
     schema_version: 1,
@@ -182,6 +202,7 @@ jq -S -n \
       compiler: {
         name: "yanxu",
         version: $compiler.version,
+        source_ref: $compiler_source_ref,
         commit_sha: $compiler.commit_sha,
         target: $compiler.build_target,
         mode: $compiler.build_mode
@@ -195,12 +216,18 @@ jq -e \
   --arg minimum_yanxu "$minimum_yanxu" \
   --arg commit "$commit_sha" \
   --arg target "$target" \
+  --arg compiler_version "$expected_compiler_version" \
+  --arg compiler_ref "refs/tags/v$expected_compiler_version" \
+  --arg compiler_commit "$expected_compiler_commit" \
   '.schema_version == 1 and .version == $version
    and .minimum_yanxu_version == $minimum_yanxu
    and .source.commit_sha == $commit
    and .build.target == $target and .build.profile == "release"
    and .build.standalone and (.build.separate_runtime_bundled | not)
    and .build.lock.target == $target and .build.lock.manifest_sha256 == .build.manifest.sha256
+   and .build.compiler.version == $compiler_version
+   and .build.compiler.source_ref == $compiler_ref
+   and .build.compiler.commit_sha == $compiler_commit
    and .build.compiler.target == $target and .build.compiler.mode == "release"
    and (.artifact.sha256 | test("^[0-9a-f]{64}$"))
    and (.application.sha256 | test("^[0-9a-f]{64}$"))

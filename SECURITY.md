@@ -12,7 +12,7 @@
 
 依赖审计默认拒绝 critical/high。任何抑制都必须精确指定诊断代码、复核原因和 UTC 到期日；过期项不会继续掩盖发现。项目事务在覆盖前保留恢复信息，并在检测到并发修改或无效日志时拒绝写回。
 
-正式发行档案均配有单 LF 的 SHA-256 文件，并由两套校验工具复验。Release 同时提供六份逐目标 CycloneDX 1.5 SBOM、逐目标构建元数据、构建来源证明和 SBOM 证明；每份签名 SBOM 谓词绑定对应归档摘要、目标和锁文件摘要，构建元数据还绑定源码提交、言序编译器、清单及独立应用摘要。发布流程在公开前验证证明，公开安装冒烟使用同一批已验签字节，正式化前任何一步失败都会保持预发布；已经稳定发布的 Release 不会被回退或覆盖。安装器只把`YANBAO_GITHUB_TOKEN`的私有副本交给 HTTPS 下载请求，不把该副本留在调用作用域，并在启动本机言序或发行程序前移除`GH_TOKEN`、`GITHUB_TOKEN`、`YANBAO_GITHUB_TOKEN`和`YANXU_GITHUB_TOKEN`。请在公开披露前为修复预留合理时间。
+正式发行档案均配有单 LF 的 SHA-256 文件，并由两套校验工具复验。Release 同时提供六份逐目标 CycloneDX 1.5 SBOM、逐目标构建元数据、构建来源证明和 SBOM 证明；每份签名 SBOM 谓词绑定对应归档摘要、目标和锁文件摘要，构建元数据还绑定源码提交、言序编译器版本及其官方标签提交、清单及独立应用摘要。发布流程在公开前验证证明，公开安装冒烟使用同一批已验签字节，正式化前任何一步失败都会保持预发布；已经稳定发布的 Release 不会被回退或覆盖。安装器只把`YANBAO_GITHUB_TOKEN`的私有副本交给 HTTPS 下载请求，不把该副本留在调用作用域，并在启动本机言序或发行程序前移除`GH_TOKEN`、`GITHUB_TOKEN`、`YANBAO_GITHUB_TOKEN`和`YANXU_GITHUB_TOKEN`。请在公开披露前为修复预留合理时间。
 
 ## 验证正式发行
 
@@ -70,6 +70,11 @@ sha256sum --check "$checksum"
 archive_sha="$(sha256sum "$archive" | awk '{print $1}')"
 archive_bytes="$(wc -c < "$archive" | tr -d ' ')"
 lock_sha="$(sha256sum "$lockfile" | awk '{print $1}')"
+yanxu_version="$(jq -er .minimum_yanxu_version "$metadata")"
+printf '%s\n' "$yanxu_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
+yanxu_ref="refs/tags/v$yanxu_version"
+yanxu_commit="$(gh api "repos/YanXuLang/yanxu/commits/v$yanxu_version" --jq .sha)"
+printf '%s\n' "$yanxu_commit" | grep -Eq '^[0-9a-f]{40}$'
 sbom_verification=
 for source_ref in "refs/tags/$tag" refs/heads/main; do
   if candidate="$(gh attestation verify "$archive" --repo "$repo" \
@@ -86,12 +91,16 @@ test -n "$sbom_verification"
 jq -e --arg version "$version" --arg commit "$commit" \
   --arg ref "refs/tags/$tag" --arg target "$target" \
   --arg archive "$archive" --arg archive_sha "$archive_sha" \
-  --arg lock_sha "$lock_sha" \
+  --arg lock_sha "$lock_sha" --arg yanxu_version "$yanxu_version" \
+  --arg yanxu_ref "$yanxu_ref" --arg yanxu_commit "$yanxu_commit" \
   '.schema_version == 1 and .version == $version
    and .source.commit_sha == $commit and .source.ref == $ref
    and .artifact.name == $archive and .artifact.sha256 == $archive_sha
    and .build.target == $target and .build.profile == "release"
    and .build.standalone and (.build.separate_runtime_bundled | not)
+   and .build.compiler.version == $yanxu_version
+   and .build.compiler.source_ref == $yanxu_ref
+   and .build.compiler.commit_sha == $yanxu_commit
    and .build.lock.target == $target and .build.lock.sha256 == $lock_sha' \
   "$metadata" >/dev/null
 printf '%s\n' "$sbom_verification" | jq -e --slurpfile sbom "$sbom" \
