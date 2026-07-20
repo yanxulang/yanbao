@@ -420,9 +420,11 @@ jobs:
           archive_fixture="$metadata_dir/yanbao-${{ matrix.target }}.archive"
           cp "$app" "$archive_fixture"
           metadata="$metadata_dir/yanbao-${{ matrix.target }}.build.json"
+          echo "开始生成独立应用构建元数据"
           YANXU_BIN="$YANXU_BIN" sh scripts/generate-build-metadata.sh \
             "${{ matrix.target }}" "$archive_fixture" "$app" "$metadata"
-          jq -e \
+          echo "构建元数据脚本执行通过"
+          if ! jq -e \
             --arg version "$YANBAO_EXPECTED_VERSION" \
             --arg commit "$GITHUB_SHA" \
             --arg compiler_version "$YANXU_EXPECTED_VERSION" \
@@ -436,6 +438,12 @@ jobs:
              and .build.target == $target and .build.compiler.target == $target
              and .build.profile == "release" and .build.standalone
              and (.build.separate_runtime_bundled | not)' "$metadata" >/dev/null
+          then
+            echo "CI 预期的提交、目标或编译器绑定与构建元数据不一致" >&2
+            jq -c . "$metadata" >&2 || true
+            exit 1
+          fi
+          echo "构建元数据外层绑定断言通过"
           mismatch="$metadata_dir/mismatched-target.build.json"
           if YANXU_BIN="$YANXU_BIN" sh scripts/generate-build-metadata.sh \
             "mismatch-${{ matrix.target }}" "$archive_fixture" "$app" "$mismatch"; then
