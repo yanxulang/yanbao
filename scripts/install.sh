@@ -126,9 +126,9 @@ case "$expected" in ''|*[!0-9A-Fa-f]*) fail "SHA-256 校验文件格式无效" ;
 [ "${#expected}" -eq 64 ] || fail "SHA-256 校验文件格式无效"
 expected="$(printf '%s' "$expected" | tr 'A-F' 'a-f')"
 if command -v sha256sum >/dev/null 2>&1; then
-  actual="$(sha256sum "$tmp_dir/$asset" | awk '{print $1}')"
+  actual="$(sha256sum < "$tmp_dir/$asset" | awk '{print $1}')"
 elif command -v shasum >/dev/null 2>&1; then
-  actual="$(shasum -a 256 "$tmp_dir/$asset" | awk '{print $1}')"
+  actual="$(shasum -a 256 < "$tmp_dir/$asset" | awk '{print $1}')"
 else
   fail "系统没有 sha256sum 或 shasum，无法校验下载"
 fi

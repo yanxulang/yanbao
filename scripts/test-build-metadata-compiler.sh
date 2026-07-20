@@ -13,9 +13,9 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{print $1}'
+    sha256sum < "$1" | awk '{print $1}'
   else
-    shasum -a 256 "$1" | awk '{print $1}'
+    shasum -a 256 < "$1" | awk '{print $1}'
   fi
 }
 
@@ -82,6 +82,13 @@ for target in $targets; do
   lockfile="$work/yanbao-$target.lock"
   sed "s/^target = \".*\"$/target = \"$target\"/" "$base_lock" > "$lockfile"
   archive="$work/yanbao-$target.archive"
+  case "$target" in
+    *-pc-windows-msvc)
+      windows_temp="$work/D:\\a\\_temp"
+      mkdir -p "$windows_temp"
+      archive="$windows_temp/yanbao-$target.archive"
+      ;;
+  esac
   printf 'archive fixture for %s\n' "$target" > "$archive"
   compiler_info="$work/yanxu-$target.json"
   jq -n --arg version "$compiler_version" --arg commit "$expected_commit" \
@@ -102,11 +109,14 @@ for target in $targets; do
   YANBAO_TEST_APPLICATION_INFO="$application_info" \
     sh "$generator" "$target" "$archive" "$fake_application" "$metadata"
   jq -e \
+    --arg archive_sha "$(sha256_file "$archive")" \
     --arg version "$compiler_version" \
     --arg ref "refs/tags/v$compiler_version" \
     --arg commit "$expected_commit" \
     --arg target "$target" \
-    '.build.compiler.version == $version
+    '.artifact.sha256 == $archive_sha
+     and (.artifact.sha256 | test("^[0-9a-f]{64}$"))
+     and .build.compiler.version == $version
      and .build.compiler.source_ref == $ref
      and .build.compiler.commit_sha == $commit
      and .build.compiler.target == $target' \
