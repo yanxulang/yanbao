@@ -62,6 +62,7 @@ fi
 
 script_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 root=$(git -C "$script_dir/.." rev-parse --show-toplevel)
+execution_root=$(dirname "$root")
 runner=${1:-${YANXU_TEST_RUNNER:-}}
 if [ -z "$runner" ] || [ ! -x "$runner" ]; then
   echo "用法：test-audit-capability-negotiation.sh <言序程序>" >&2
@@ -83,13 +84,16 @@ run_scenario() {
   operations="$work/$scenario.operations"
   : > "$operations"
   set +e
-  YANBAO_AUDIT_FAKE=1 \
-  YANBAO_AUDIT_SCENARIO="$scenario" \
-  YANBAO_AUDIT_OPERATION_LOG="$operations" \
-  YANBAO_AUDIT_PROJECT_ROOT="$root" \
-  YANXU_BIN="$script_dir/test-audit-capability-negotiation.sh" \
-    "$runner" run "$root/src/主.yx" -- audit --manifest-path "$root" \
-      --message-format json > "$output" 2> "$errors"
+  (
+    cd "$execution_root"
+    YANBAO_AUDIT_FAKE=1 \
+    YANBAO_AUDIT_SCENARIO="$scenario" \
+    YANBAO_AUDIT_OPERATION_LOG="$operations" \
+    YANBAO_AUDIT_PROJECT_ROOT="$root" \
+    YANXU_BIN="$script_dir/test-audit-capability-negotiation.sh" \
+      "$runner" run "$root/src/主.yx" -- audit --manifest-path "$root" \
+        --message-format json
+  ) > "$output" 2> "$errors"
   actual_status=$?
   set -e
 
