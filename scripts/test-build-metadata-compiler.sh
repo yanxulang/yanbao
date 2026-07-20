@@ -11,6 +11,14 @@ rm -rf "$work"
 mkdir -p "$work"
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
 yanbao_version=$(sed -n 's/^版本 = "\([^"]*\)"$/\1/p' "$root/言序.toml")
 compiler_version=$(sed -n 's/^言序 = ">=\([^"]*\)"$/\1/p' "$root/言序.toml")
 expected_commit=0123456789abcdef0123456789abcdef01234567
@@ -60,9 +68,19 @@ aarch64-apple-darwin
 x86_64-pc-windows-msvc
 aarch64-pc-windows-msvc'
 
+manifest_sha=$(sha256_file "$root/言序.toml")
+base_lock="$work/base.lock"
+{
+  printf 'lock_version = 2\n'
+  printf 'manifest_checksum = "%s"\n' "$manifest_sha"
+  printf 'target = "x86_64-unknown-linux-gnu"\n'
+  printf 'generator = "1.1.18"\n'
+  printf 'package = []\n\n[root_dependencies]\n\n[root_dev_dependencies]\n'
+} > "$base_lock"
+
 for target in $targets; do
   lockfile="$work/yanbao-$target.lock"
-  sed "s/^target = \".*\"$/target = \"$target\"/" "$root/言序.lock" > "$lockfile"
+  sed "s/^target = \".*\"$/target = \"$target\"/" "$base_lock" > "$lockfile"
   archive="$work/yanbao-$target.archive"
   printf 'archive fixture for %s\n' "$target" > "$archive"
   compiler_info="$work/yanxu-$target.json"
