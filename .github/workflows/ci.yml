@@ -463,6 +463,13 @@ jobs:
           YANXU_BIN="$YANXU_BIN" "$app" init "$standalone_project" --name 独立应用验收 --force
           YANXU_BIN="$YANXU_BIN" "$app" doctor --manifest-path "$standalone_project"
 
+          audit_handshake="$("$YANXU_BIN" package protocol \
+            '{"protocol_version":1,"operation":"handshake"}')"
+          audit_capable="$(printf '%s\n' "$audit_handshake" | jq -r '
+            .ok == true and
+            (.result.operation_capabilities.audit | type == "object")
+          ')"
+          if [[ "$audit_capable" == "true" ]]; then
           audit_dependency="$RUNNER_TEMP/yanbao-audit-dependency"
           YANXU_BIN="$YANXU_BIN" "$app" new "$audit_dependency" --name audit_dependency
           YANXU_BIN="$YANXU_BIN" "$app" add audit_dependency --path "$audit_dependency" \
@@ -607,6 +614,21 @@ jobs:
               .code == "AUDIT_NATIVE_UNSIGNED" and
               .severity == "medium" and (.suggestion | length > 0))
           ' >/dev/null
+          else
+            set +e
+            audit_missing="$(YANXU_BIN="$YANXU_BIN" "$app" audit \
+              --manifest-path "$standalone_project" --message-format json \
+              2>"$RUNNER_TEMP/yanbao-audit-capability-missing.log")"
+            audit_missing_status=$?
+            set -e
+            test "$audit_missing_status" -eq 1
+            printf '%s\n' "$audit_missing" | jq -e '
+              .success == false and .exit_code == 1 and .phase == "failed" and
+              any(.diagnostics[]; .code == "AUDIT_CAPABILITY_MISSING") and
+              (.changes | length) == 0
+            ' >/dev/null
+            test -s "$RUNNER_TEMP/yanbao-audit-capability-missing.log"
+          fi
 
           transaction_root="$RUNNER_TEMP/yanbao-transaction-e2e"
           transaction_dependency="$transaction_root/dependency"
