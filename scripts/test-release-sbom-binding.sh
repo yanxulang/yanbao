@@ -60,10 +60,19 @@ aarch64-pc-windows-msvc'
 serials="$work/serials"
 : > "$serials"
 commit=$(git -C "$root" rev-parse HEAD)
+manifest_sha=$(sha256_file "$root/言序.toml")
+base_lock="$work/base.lock"
+{
+  printf 'lock_version = 2\n'
+  printf 'manifest_checksum = "%s"\n' "$manifest_sha"
+  printf 'target = "x86_64-unknown-linux-gnu"\n'
+  printf 'generator = "1.1.18"\n'
+  printf 'package = []\n\n[root_dependencies]\n\n[root_dev_dependencies]\n'
+} > "$base_lock"
 
 for target in $targets; do
   lockfile="$work/yanbao-$target.lock"
-  sed "s/^target = \".*\"$/target = \"$target\"/" "$root/言序.lock" > "$lockfile"
+  sed "s/^target = \".*\"$/target = \"$target\"/" "$base_lock" > "$lockfile"
   case "$target" in
     *windows*) archive="$work/yanbao-$target.zip" ;;
     *) archive="$work/yanbao-$target.tar.gz" ;;
