@@ -520,7 +520,7 @@ jobs:
               version: "1.2.3",
               url: "https://packages.example.invalid/registry_dep-1.2.3.tar.gz",
               checksum: $checksum,
-              yanked: true,
+              yanked: false,
               vulnerabilities: [{
                 id: "YXSA-2026-0001",
                 severity: "high",
@@ -533,6 +533,9 @@ jobs:
           YANXU_BIN="$YANXU_BIN" "$app" new "$audit_registry_project" --name audit_registry_project
           YANXU_BIN="$YANXU_BIN" "$app" add registry_dep --registry "$audit_registry" \
             --version '=1.2.3' --manifest-path "$audit_registry_project" --offline
+          registry_index="$audit_registry/registry_dep/index.json"
+          jq '.versions[0].yanked = true' "$registry_index" > "$registry_index.tmp"
+          mv "$registry_index.tmp" "$registry_index"
           set +e
           audit_registry_denied="$(YANXU_BIN="$YANXU_BIN" "$app" audit \
             --manifest-path "$audit_registry_project" --offline --json \
