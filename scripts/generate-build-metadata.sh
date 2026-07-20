@@ -104,9 +104,21 @@ if ! compiler_info=$("$compiler" version --json); then
   echo "无法读取言序编译器版本：$compiler" >&2
   exit 2
 fi
-compiler_version=$(printf '%s\n' "$compiler_info" | jq -er '.version')
-compiler_commit=$(printf '%s\n' "$compiler_info" | jq -er '.commit_sha')
-printf '%s\n' "$compiler_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
+if ! compiler_version=$(printf '%s\n' "$compiler_info" | jq -er '.version'); then
+  echo "言序编译器版本信息缺少 version 字段" >&2
+  printf '%s\n' "$compiler_info" | jq -c . >&2 || printf '%s\n' "$compiler_info" >&2
+  exit 1
+fi
+if ! compiler_commit=$(printf '%s\n' "$compiler_info" | jq -er '.commit_sha'); then
+  echo "言序编译器版本信息缺少 commit_sha 字段" >&2
+  printf '%s\n' "$compiler_info" | jq -c . >&2 || printf '%s\n' "$compiler_info" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$compiler_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+  echo "言序编译器 version 字段不是 X.Y.Z" >&2
+  jq -cn --arg actual "$compiler_version" '{actual: $actual}' >&2
+  exit 1
+fi
 if [ "$compiler_version" != "$expected_compiler_version" ]; then
   echo "言序编译器版本 $compiler_version 与官方标签版本 $expected_compiler_version 不一致" >&2
   exit 1
@@ -115,19 +127,33 @@ if [ "$compiler_commit" != "$expected_compiler_commit" ]; then
   echo "言序编译器提交 $compiler_commit 与官方标签提交 $expected_compiler_commit 不一致" >&2
   exit 1
 fi
-jq -e --arg target "$target" \
+if ! jq -e --arg target "$target" \
   '.build_target == $target and .build_mode == "release"
    and (.commit_sha | test("^[0-9a-f]{40}$"))' >/dev/null <<EOF
 $compiler_info
 EOF
+then
+  echo "言序编译器构建目标、模式或提交格式不符合发布要求" >&2
+  printf '%s\n' "$compiler_info" | \
+    jq -c '{build_target, build_mode, commit_sha}' >&2 || printf '%s\n' "$compiler_info" >&2
+  exit 1
+fi
 
-application_info=$(YANXU_BIN="$compiler" "$application" --version --message-format json)
-jq -e --arg version "$version" --arg compiler_version "$compiler_version" \
+if ! application_info=$(YANXU_BIN="$compiler" "$application" --version --message-format json); then
+  echo "无法读取独立应用版本信息：$application" >&2
+  exit 1
+fi
+if ! jq -e --arg version "$version" --arg compiler_version "$compiler_version" \
   '.schema_version == 1 and .success == true and .exit_code == 0
    and any(.messages[]; .message == ("言包 " + $version))
    and any(.messages[]; .message == ("言序 " + $compiler_version))' >/dev/null <<EOF
 $application_info
 EOF
+then
+  echo "独立应用版本信息未绑定预期言包或言序版本" >&2
+  printf '%s\n' "$application_info" | jq -c . >&2 || printf '%s\n' "$application_info" >&2
+  exit 1
+fi
 
 commit_sha=$(git -C "$root" rev-parse HEAD)
 source_epoch=$(git -C "$root" show -s --format=%ct HEAD)
@@ -211,7 +237,7 @@ jq -S -n \
   }' > "$output.tmp"
 mv "$output.tmp" "$output"
 
-jq -e \
+if ! jq -e \
   --arg version "$version" \
   --arg minimum_yanxu "$minimum_yanxu" \
   --arg commit "$commit_sha" \
@@ -233,6 +259,11 @@ jq -e \
    and (.application.sha256 | test("^[0-9a-f]{64}$"))
    and (.build.manifest.sha256 | test("^[0-9a-f]{64}$"))
    and (.build.lock.sha256 | test("^[0-9a-f]{64}$"))' "$output" >/dev/null
+then
+  echo "生成的构建元数据未通过自校验" >&2
+  jq -c . "$output" >&2 || true
+  exit 1
+fi
 
 if grep -F "$root" "$output" >/dev/null; then
   echo "构建元数据不得包含构建机绝对路径" >&2
