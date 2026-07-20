@@ -68,6 +68,8 @@ if [ -z "$runner" ] || [ ! -x "$runner" ]; then
   echo "用法：test-audit-capability-negotiation.sh <言序程序>" >&2
   exit 2
 fi
+runner_directory=$(CDPATH='' cd -- "$(dirname -- "$runner")" && pwd)
+runner="$runner_directory/$(basename -- "$runner")"
 command -v jq >/dev/null 2>&1
 
 work="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/yanbao-audit-capability-$$"
