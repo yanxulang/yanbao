@@ -13,9 +13,9 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 sha256_file() {
   if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | awk '{print $1}'
+    sha256sum < "$1" | awk '{print $1}'
   else
-    shasum -a 256 "$1" | awk '{print $1}'
+    shasum -a 256 < "$1" | awk '{print $1}'
   fi
 }
 
@@ -74,7 +74,11 @@ for target in $targets; do
   lockfile="$work/yanbao-$target.lock"
   sed "s/^target = \".*\"$/target = \"$target\"/" "$base_lock" > "$lockfile"
   case "$target" in
-    *windows*) archive="$work/yanbao-$target.zip" ;;
+    *windows*)
+      windows_temp="$work/D:\\a\\_temp"
+      mkdir -p "$windows_temp"
+      archive="$windows_temp/yanbao-$target.zip"
+      ;;
     *) archive="$work/yanbao-$target.tar.gz" ;;
   esac
   printf 'archive fixture for %s\n' "$target" > "$archive"
