@@ -370,9 +370,17 @@ jobs:
           mkdir -p "$compile_source"
           cp src/*.yx "$compile_source/"
           "$YANXU_BIN" compile "$compile_source/主.yx" -o "$app" --release --standalone
+          set +e
           version_output="$(YANXU_BIN="$YANXU_BIN" "$app" --version | tr -d '\r')"
+          version_status=$?
+          set -e
           expected="$(printf '言包 %s\n言序 %s' "$YANBAO_EXPECTED_VERSION" "$YANXU_EXPECTED_VERSION")"
-          test "$version_output" = "$expected"
+          if [[ "$version_status" -ne 0 || "$version_output" != "$expected" ]]; then
+            printf '独立应用版本验证失败（状态 %s）\n期望：\n%s\n实际：\n%s\n' \
+              "$version_status" "$expected" "$version_output" >&2
+            exit 1
+          fi
+          echo "独立应用版本验证通过"
           help_output="$(YANXU_BIN="$YANXU_BIN" "$app" build --help | tr -d '\r')"
           printf '%s\n' "$help_output" | grep -Fq 'yanbao build'
           expect_cli_failure() {
@@ -389,6 +397,7 @@ jobs:
           expect_cli_failure CLI003 add 包名 --version
           expect_cli_failure CLI002 build --unknown-option
           expect_cli_failure CLI004 build --standalone --bundle
+          echo "独立应用命令行失败边界验证通过"
           set +e
           invalid_timeout_output="$(YANBAO_TIMEOUT=invalid YANXU_BIN="$YANXU_BIN" "$app" version 2>&1)"
           invalid_timeout_status=$?
@@ -405,6 +414,7 @@ jobs:
           json_lines="$(YANXU_BIN="$YANXU_BIN" "$app" version --message-format json-lines)"
           printf '%s\n' "$json_lines" | jq -e '.schema_version == 1 and (.type == "message" or .type == "result")' >/dev/null
           test "$(printf '%s\n' "$json_lines" | jq -s 'map(select(.type == "result")) | length')" -eq 1
+          echo "独立应用超时与结构化输出验证通过"
           metadata_dir="$RUNNER_TEMP/yanbao-build-metadata"
           mkdir -p "$metadata_dir"
           archive_fixture="$metadata_dir/yanbao-${{ matrix.target }}.archive"
@@ -433,6 +443,7 @@ jobs:
             exit 1
           fi
           test ! -e "$mismatch"
+          echo "独立应用构建元数据验证通过"
           set +e
           json_failure="$(YANXU_BIN="$YANXU_BIN" "$app" build --unknown-option --message-format json 2>"$RUNNER_TEMP/yanbao-json-error.log")"
           json_failure_status=$?
@@ -453,11 +464,13 @@ jobs:
             .diagnostics[0].code == "YANXU_PROTOCOL_EMPTY" and
             .diagnostics[0].original_exit_code == 2
           ' >/dev/null
+          echo "独立应用错误协议验证通过"
           if [[ "$RUNNER_OS" == "Windows" ]]; then
             cp "$app" yanbao-app.exe
             launcher_output="$(YANXU_BIN="$YANXU_BIN" ./yanbao.cmd --version | tr -d '\r')"
             rm -f yanbao-app.exe
             test "$launcher_output" = "$expected"
+            echo "Windows 启动器验证通过"
           fi
           standalone_project="$RUNNER_TEMP/yanbao-standalone-e2e"
           YANXU_BIN="$YANXU_BIN" "$app" init "$standalone_project" --name 独立应用验收 --force
